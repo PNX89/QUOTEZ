@@ -162,10 +162,12 @@ class Mt5Source:
     def connect(self) -> None:
         """Start or attach to the terminal. Called once from the server lifespan.
 
-        `initialize()` launches the terminal if it is not already running and waits up to
-        60 seconds by default, which is why this never happens inside a tool call. It
-        returns False rather than raising, so the result is checked and `last_error()` is
-        read for the reason.
+        `initialize()` launches the terminal if it is not already running, and the call is
+        bounded by its `timeout` argument, documented as defaulting to 60000 milliseconds.
+        The docs put no figure on the launch itself, so 60 seconds is the ceiling on the
+        call rather than a measured startup time, and either way it is why this never
+        happens inside a tool call. It returns False rather than raising, so the result is
+        checked and `last_error()` is read for the reason.
         """
         if self._connected:
             return

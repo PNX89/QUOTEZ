@@ -56,8 +56,9 @@ class MarketDataSource(Protocol):
         """Acquire whatever the source needs to serve requests. Idempotent.
 
         Called once from the server lifespan, never per request. `mt5.initialize()` will
-        start the terminal if it is not already running and waits up to 60 seconds, so
-        doing this inside a tool makes the first call look hung.
+        start the terminal if it is not already running, bounded by a timeout that defaults
+        to 60000 milliseconds, so doing this inside a tool risks making the first call look
+        hung.
         """
         ...
 

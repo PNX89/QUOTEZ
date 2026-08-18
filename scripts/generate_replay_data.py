@@ -20,10 +20,10 @@ same command produces byte-identical CSVs on any machine, which is what lets the
 transcript be asserted byte for byte. This script is never run at import time or test time.
 
 Gaps: bars cover 08:00 to 14:00 UTC on weekdays only, from Monday 2026-06-01 to Friday
-2026-06-12. That is 360 bars a day over 10 trading days, 3600 per symbol, with 9 overnight
-breaks and 1 weekend in the middle. Aggregation is only interesting over holes, and a
-gapless series would let positional grouping pass every test that wall-clock bucketing
-passes.
+2026-06-12. That is 360 bars a day over 10 trading days, 3600 per symbol, with 9 breaks in
+the series: 8 overnight and 1 across the weekend in the middle. Aggregation is only
+interesting over holes, and a gapless series would let positional grouping pass every test
+that wall-clock bucketing passes.
 """
 
 from __future__ import annotations

@@ -7,13 +7,19 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 An MCP server that exposes MetaTrader 5 market data as typed, read only tools an LLM agent can
-call. Python 3.11 or newer, one runtime dependency, stdio transport.
+call. Python 3.11 or newer, one runtime dependency, stdio transport. The badge stops at 3.13
+because that is where the classifiers stop; CI runs a 3.14 leg as well, marked advisory, and 3.14
+joins the badge once it has been green long enough to be a promise rather than a hope.
 
 An agent is only as good as the tools you hand it, and market data is where a sloppy tool does
 real damage. The model restates whatever a tool returns as fact, so a payload with no units, no
 timezone and no provenance becomes a confident sentence about a price someone might act on. QUOTEZ
 answers with generated output schemas rather than text blobs, UTC everywhere, a `synthetic` flag
 on every payload, and no write path in the code.
+
+This is one tool built so that it cannot do damage, which is a smaller and more checkable question
+than whether an agent as a whole can be trusted with tools. That larger one is
+[QUELLZ](https://github.com/PNX89/QUELLZ)'s.
 
 ## Scope and limits
 
@@ -333,19 +339,22 @@ class stops existing.
 
 **Generated data, not a real feed.** A licensing decision, not a preference. MetaTrader exports
 are the broker's licensed feed, and for index and equity CFDs the underlying is exchange licensed.
-[Yahoo Finance prohibits
-redistribution](https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apiforydn/index.html) of
-what it displays, and licenses its [market data from exchanges and
-vendors](https://help.yahoo.com/kb/SLN2310.html) under their restrictions. [HistData's
+Yahoo's help pages state the restriction in as many words, [you must not redistribute information
+displayed on or provided by Yahoo Finance](https://help.yahoo.com/kb/SLN2310.html), and its
+[developer API terms](https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apiforydn/index.html)
+separately restrict selling or sublicensing access. [HistData's
 FAQ](https://www.histdata.com/f-a-q/) grants no redistribution rights at all; it says only that
 the data comes with no warranty, and silence is not a licence. Committing any of it to an MIT
 repository would relicense data I have no right to relicense.
 
 **The standard library, not pandas or numpy.** At bundled CSV scale `csv` plus `datetime` plus
-dataclasses is enough and the tree stays auditable. That tree is worth naming honestly though:
-`mcp` 2.x is one direct dependency that pulls anyio, httpx2, jsonschema, mcp-types,
-opentelemetry-api, pydantic, sse-starlette, starlette, typing-extensions and uvicorn, a bigger
-footprint than v1.
+dataclasses is enough and the tree stays auditable. That tree is worth naming honestly though, all
+of it: `mcp` 2.x is one direct dependency that pulls anyio, httpx2, jsonschema, mcp-types,
+opentelemetry-api, pydantic, pyjwt with its crypto extra, python-multipart, sse-starlette,
+starlette, typing-extensions, typing-inspection and uvicorn, plus pywin32 on Windows. The crypto
+extra brings cryptography, cffi and pycparser in behind it. That is a bigger footprint than v1,
+and a test reads the committed `uv.lock` and fails if this list stops matching it, because a
+paragraph that exists to name the tree is worth nothing if it names most of the tree.
 
 **No `run_backtest` tool.** A backtest is compute unbounded, needs far more than a
 `MarketDataSource`, and would duplicate [QUACKZ](https://github.com/PNX89/QUACKZ), so the pair
@@ -364,9 +373,11 @@ reinvented five times.
   is a no-op on macOS and Linux by design. A test asserts the environment marker keeps it that
   way.
 - [`initialize()`](https://www.mql5.com/en/docs/python_metatrader5/mt5initialize_py) launches the
-  terminal if it is not already running and waits up to 60 seconds. QUOTEZ opens the connection
-  once in the server lifespan rather than per call, so that cost lands at startup instead of
-  making the first tool call look hung.
+  terminal if it is not already running, and the whole operation is bounded by its `timeout`
+  argument, documented as defaulting to 60000 milliseconds. The page does not put a figure on the
+  launch itself, so treat 60 seconds as the ceiling on the call rather than as a measured startup
+  time. QUOTEZ opens the connection once in the server lifespan rather than per call, so whatever
+  it costs lands at startup instead of making the first tool call look hung.
 - **The two sources do not agree on where a D1 or an H4 bucket starts.** The replay roll up floors
   on the epoch second, so D1 opens at 00:00 UTC and H4 at 00, 04, 08, 12, 16 and 20 UTC. A
   MetaTrader terminal aligns D1 and H4 to the broker's server day, which is commonly UTC+2 or
@@ -425,6 +436,14 @@ uv run mypy
 
 MIT. See [LICENSE](LICENSE).
 
-Part of the Q...Z toolset: [QUACKZ](https://github.com/PNX89/QUACKZ), QUOTEZ,
-[QUELLZ](https://github.com/PNX89/QUELLZ), [QUIDZ](https://github.com/PNX89/QUIDZ),
-[QUESTZ](https://github.com/PNX89/QUESTZ).
+Part of the Q...Z toolset, five tools for the failure that does not announce itself:
+
+- [QUACKZ](https://github.com/PNX89/QUACKZ), deflating a backtest that only looks good because it
+  was picked out of two hundred.
+- QUOTEZ, this one: market data an agent can read and cannot act on.
+- [QUELLZ](https://github.com/PNX89/QUELLZ), measuring what prompt injection containment costs in
+  utility as well as in attack rate.
+- [QUIDZ](https://github.com/PNX89/QUIDZ), refusing the outbound payment that would have gone out
+  twice.
+- [QUESTZ](https://github.com/PNX89/QUESTZ), stopping a scraper before it writes a CSV from a page
+  that changed shape.

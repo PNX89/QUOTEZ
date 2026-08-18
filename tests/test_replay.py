@@ -328,9 +328,9 @@ def test_bundled_bars_are_ohlc_consistent_and_gapped(symbol: str) -> None:
         assert 8 <= bar.time.hour < 14
         assert bar.time.weekday() < 5
 
-    # 9 overnight breaks and 1 weekend. Aggregation only gets interesting over holes, so a
-    # regeneration that produced a continuous series would silently weaken the roll-up
-    # tests rather than fail them.
+    # 9 breaks in total: 8 overnight and 1 across the weekend. Aggregation only gets
+    # interesting over holes, so a regeneration that produced a continuous series would
+    # silently weaken the roll-up tests rather than fail them.
     breaks = [
         (later.time - earlier.time)
         for earlier, later in pairwise(bars)

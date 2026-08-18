@@ -109,8 +109,9 @@ def build_server(config: ServerConfig) -> MCPServer:
     @asynccontextmanager
     async def lifespan(server: MCPServer) -> AsyncIterator[MarketDataSource]:
         # The terminal connection is opened exactly once, here, and never inside a tool.
-        # `mt5.initialize()` starts the terminal if it is not running and waits up to 60
-        # seconds, so doing it per call would make the first tool call look hung.
+        # `mt5.initialize()` starts the terminal if it is not running, bounded by a timeout
+        # that defaults to 60000 milliseconds, so doing it per call would risk making the
+        # first tool call look hung.
         source.connect()
         try:
             yield source

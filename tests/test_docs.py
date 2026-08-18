@@ -162,6 +162,22 @@ def test_the_readme_admits_the_requirement_that_is_not_implemented() -> None:
     assert "No rate limiting" in section("Limitations")
 
 
+def test_the_dependency_paragraph_names_every_direct_dependency_of_the_sdk() -> None:
+    """The paragraph exists to name the tree, so the tree is where it gets checked.
+
+    It shipped naming ten of mcp 2.0.0's fourteen direct dependencies, with pyjwt and its
+    crypto stack and python-multipart among the four it left out. A list that is mostly
+    right is worse than no list, because it reads as an audit.
+    """
+    lock = tomllib.loads((REPO / "uv.lock").read_text(encoding="utf-8"))
+    sdk = next(package for package in lock["package"] if package["name"] == "mcp")
+    named = section("Design decisions")
+    missing = [
+        dependency["name"] for dependency in sdk["dependencies"] if dependency["name"] not in named
+    ]
+    assert missing == []
+
+
 # --------------------------------------------------------------------------------------
 # Citations and links
 
@@ -191,6 +207,15 @@ def test_the_changelog_documents_the_version_the_package_reports() -> None:
     assert re.search(rf"## \[{re.escape(__version__)}\] - \d{{4}}-\d{{2}}-\d{{2}}\n", CHANGELOG)
     assert f"[{__version__}]: https://" in CHANGELOG
     assert "https://keepachangelog.com/" in CHANGELOG
+
+
+def test_the_changelog_release_link_points_at_this_repository_and_this_version() -> None:
+    # A hand written URL in a footer is where a repository rename or a version bump goes
+    # unnoticed. The tag it names has to be pushed for the link to resolve, which no offline
+    # test can check, so this checks the half that can be checked.
+    manifest = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    homepage = manifest["project"]["urls"]["Homepage"]
+    assert f"[{__version__}]: {homepage}/releases/tag/v{__version__}" in CHANGELOG
 
 
 def test_the_changelog_names_every_tool_the_server_registers() -> None:

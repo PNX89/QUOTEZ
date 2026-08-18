@@ -246,9 +246,9 @@ def test_the_module_global_is_built_lazily_and_only_once() -> None:
 
 def test_building_an_mt5_server_touches_no_terminal() -> None:
     # Construction is pure: the connection belongs to the lifespan, because
-    # mt5.initialize() launches the terminal and waits up to 60 seconds. Building the mt5
-    # server on a machine with no wheel available has to work, or `quotez --source mt5
-    # --help` would fail on macOS.
+    # mt5.initialize() launches the terminal and is bounded by a timeout defaulting to
+    # 60000 milliseconds. Building the mt5 server on a machine with no wheel available has
+    # to work, or `quotez --source mt5 --help` would fail on macOS.
     build_server(ServerConfig(source="mt5"))
     assert "MetaTrader5" not in sys.modules
 
