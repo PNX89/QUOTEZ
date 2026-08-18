@@ -13,6 +13,8 @@ the workflow that has to exist for the badge at the top of the README to mean an
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -239,6 +241,29 @@ def test_every_action_is_pinned_to_a_released_major_tag() -> None:
     unpinned = [entry for entry in uses if not re.fullmatch(r"[\w.-]+/[\w.-]+@v\d+", entry)]
     assert unpinned == []
     assert set(uses) == {"actions/checkout@v7", "astral-sh/setup-uv@v10"}
+
+
+def test_the_readme_states_the_number_of_tests_this_suite_actually_has() -> None:
+    """Collected in a subprocess, because the count has to come from pytest, not from a guess.
+
+    `--collect-only` runs nothing, so this does not recurse; it costs about a second and it
+    is the difference between a number that stays true and a number that was true once.
+    """
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q"],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=True,
+        cwd=REPO,
+    )
+    collected = sum(
+        int(line.rsplit(": ", 1)[1])
+        for line in result.stdout.splitlines()
+        if re.fullmatch(r"tests/\S+\.py: \d+", line)
+    )
+    assert collected > 0
+    assert f"{collected} tests" in section("Development")
 
 
 def test_every_command_the_readme_tells_a_reader_to_run_is_a_command_ci_runs() -> None:
