@@ -1,22 +1,31 @@
 """Tests for quotez.replay and the bundled fixtures.
 
-Two kinds of assertion live here. The first checks the source honours its contract. The
+Three kinds of assertion live here. The first checks the source honours its contract. The
 second checks the shipped CSVs themselves, because they are committed artefacts of a
-generator that is deliberately never run at test time: if a regeneration went wrong, or a
-file was hand edited, nothing else in the suite would notice.
+generator that is never run at test time: if a regeneration went wrong, or a file was hand
+edited, nothing else in the suite would notice.
+
+The third takes the files away. Every one of those reads is an I/O call that can fail, and
+the failure has to arrive as `SourceUnavailable` naming the file rather than as whatever
+exception the standard library happened to raise. `UnicodeDecodeError` is the one worth
+naming: it is a `ValueError`, so a handler written as `except OSError` looks like it covers
+file trouble and does not.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from importlib import resources
 from itertools import pairwise
+from pathlib import Path
 
 import pytest
 
-from quotez.errors import InvalidRequest, SymbolNotFound
-from quotez.replay import CSV_COLUMNS, ReplaySource
+from quotez import replay
+from quotez.errors import InvalidRequest, SourceUnavailable, SymbolNotFound
+from quotez.replay import CSV_COLUMNS, SPECS_FILE, ReplaySource
 from tests.conftest import REPLAY_SYMBOLS, SYMBOL
 
 SESSION_MINUTES = 360
@@ -27,6 +36,25 @@ EXPECTED_M1_BARS = SESSION_MINUTES * TRADING_DAYS
 @pytest.fixture
 def source() -> ReplaySource:
     return ReplaySource()
+
+
+@pytest.fixture
+def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """A writable copy of the bundled data, with the module's caches cleared around it.
+
+    The caches are the reason this is a fixture and not three lines in each test: `_bars`
+    and `_specs` memoise a good read, so a test that broke a file after any other test had
+    loaded it would pass without ever touching the code it is aiming at.
+    """
+    package = resources.files("quotez.data")
+    for name in (SPECS_FILE, *(f"{symbol}.csv" for symbol in REPLAY_SYMBOLS)):
+        (tmp_path / name).write_text(package.joinpath(name).read_text(encoding="utf-8"))
+    monkeypatch.setattr(replay, "_data_dir", lambda: tmp_path)
+    replay._bars.cache_clear()
+    replay._specs.cache_clear()
+    yield tmp_path
+    replay._bars.cache_clear()
+    replay._specs.cache_clear()
 
 
 def utc(text: str) -> datetime:
@@ -184,6 +212,96 @@ def test_positions_and_orders_are_empty(source: ReplaySource) -> None:
     assert (orders.count, orders.orders) == (0, [])
     assert positions.synthetic is True
     assert orders.synthetic is True
+
+
+# --------------------------------------------------------------------------------------
+# When the data cannot be read
+
+
+def test_a_csv_that_is_not_utf8_is_a_source_failure_not_a_traceback(data_dir: Path) -> None:
+    # The whole point of this test. UnicodeDecodeError is a ValueError, so it slips through
+    # an `except OSError` that was written to cover exactly this situation, and the caller
+    # gets a decoder's error message with no idea which file it came from.
+    (data_dir / f"{SYMBOL}.csv").write_bytes(b"time,open,high\n\xff\xfe not utf 8 at all\n")
+    with pytest.raises(SourceUnavailable) as caught:
+        ReplaySource().get_bars(SYMBOL, "M1", 1)
+    message = str(caught.value)
+    assert f"{SYMBOL}.csv" in message
+    assert "not valid UTF-8" in message
+
+
+def test_a_specifications_file_that_is_not_utf8_is_a_source_failure(data_dir: Path) -> None:
+    (data_dir / SPECS_FILE).write_bytes(b"\xff\xfe[]")
+    with pytest.raises(SourceUnavailable, match="not valid UTF-8"):
+        ReplaySource().list_symbols()
+
+
+@pytest.mark.parametrize(
+    "content",
+    ["not json at all", '{"not": "a list"}', "[{}]", "[1, 2, 3]"],
+    ids=["garbage", "object", "unnamed", "scalars"],
+)
+def test_a_malformed_specifications_file_names_the_file(data_dir: Path, content: str) -> None:
+    (data_dir / SPECS_FILE).write_text(content)
+    with pytest.raises(SourceUnavailable) as caught:
+        ReplaySource().list_symbols()
+    assert SPECS_FILE in str(caught.value)
+
+
+def test_a_missing_csv_names_the_file_rather_than_raising_filenotfound(data_dir: Path) -> None:
+    # What a wheel built without its package data does. The symbol is in symbols.json, so
+    # the lookup succeeds and the read is what fails.
+    (data_dir / f"{SYMBOL}.csv").unlink()
+    with pytest.raises(SourceUnavailable) as caught:
+        ReplaySource().get_quote(SYMBOL)
+    assert f"{SYMBOL}.csv" in str(caught.value)
+    assert "reinstall" in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        "2026-06-01T08:00:00Z,1.0,1.1,0.9,1.05,10,not-a-number",
+        "2026-06-01T08:00:00Z,1.0,1.1,0.9,1.05,ten,2",
+        "the first of june,1.0,1.1,0.9,1.05,10,2",
+        "2026-06-01T08:00:00,1.0,1.1,0.9,1.05,10,2",
+    ],
+    ids=["bad-spread", "bad-volume", "bad-time", "naive-time"],
+)
+def test_an_unparseable_row_names_the_file(data_dir: Path, row: str) -> None:
+    # The last case is pydantic's own ValidationError, which is a ValueError, so it is
+    # caught by the same clause rather than escaping as a validation traceback.
+    (data_dir / f"{SYMBOL}.csv").write_text(f"{','.join(CSV_COLUMNS)}\n{row}\n")
+    with pytest.raises(SourceUnavailable) as caught:
+        ReplaySource().get_bars(SYMBOL, "M1", 1)
+    assert f"{SYMBOL}.csv" in str(caught.value)
+
+
+def test_a_csv_with_shifted_columns_is_a_source_failure_not_a_bad_request(
+    data_dir: Path,
+) -> None:
+    # It used to raise InvalidRequest, which is the channel for something the model can fix
+    # by asking differently. No argument makes a mangled file readable, so this belongs with
+    # the missing terminal on the protocol channel.
+    (data_dir / f"{SYMBOL}.csv").write_text("open,time,high,low,close,tick_volume,spread\n")
+    with pytest.raises(SourceUnavailable) as caught:
+        ReplaySource().get_bars(SYMBOL, "M1", 1)
+    assert not isinstance(caught.value, InvalidRequest)
+    message = str(caught.value)
+    assert f"{SYMBOL}.csv" in message
+    # Both the columns found and the columns wanted, so the message is enough to fix it.
+    assert str(list(CSV_COLUMNS)) in message
+    assert "'open', 'time'" in message
+
+
+def test_the_broken_read_is_retried_rather_than_cached(data_dir: Path) -> None:
+    # lru_cache stores results, not exceptions, so repairing the file has to be enough.
+    good = (data_dir / f"{SYMBOL}.csv").read_text()
+    (data_dir / f"{SYMBOL}.csv").write_bytes(b"\xff\xfe")
+    with pytest.raises(SourceUnavailable):
+        ReplaySource().get_bars(SYMBOL, "M1", 1)
+    (data_dir / f"{SYMBOL}.csv").write_text(good)
+    assert ReplaySource().get_bars(SYMBOL, "M1", 1).count == 1
 
 
 # --------------------------------------------------------------------------------------

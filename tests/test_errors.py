@@ -18,16 +18,20 @@ mistake mechanically.
 from __future__ import annotations
 
 from datetime import datetime
+from importlib import resources
+from pathlib import Path
 from typing import Any, NoReturn
 
 import pytest
 from mcp import Client, MCPError
 from mcp.types import INTERNAL_ERROR
 
+from quotez import replay
 from quotez.config import ServerConfig
 from quotez.errors import SourceUnavailable
 from quotez.models import SourceName
 from quotez.protocol import MarketDataSource
+from quotez.replay import SPECS_FILE
 from quotez.server import build_server
 from tests.conftest import SYMBOL, TOOL_NAMES
 
@@ -225,6 +229,38 @@ async def test_a_resource_read_against_an_unavailable_source_raises_a_protocol_e
         with pytest.raises(MCPError) as caught:
             await client.read_resource("symbols://list")
     assert caught.value.args[0] == INTERNAL_ERROR
+
+
+@pytest.mark.anyio
+async def test_an_unreadable_data_file_is_a_protocol_error_end_to_end(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A corrupt bundled file takes the same channel a dead terminal does, through a client.
+
+    The unit tests in test_replay.py assert the exception type. This asserts what a host
+    actually receives, which is the part that matters: no argument the model sends will fix
+    a file it cannot read, so the call must come back with no result rather than as a tool
+    error it will try to work around.
+    """
+    for name in (SPECS_FILE, f"{SYMBOL}.csv"):
+        (tmp_path / name).write_bytes(
+            resources.files("quotez.data").joinpath(name).read_bytes()
+            if name == SPECS_FILE
+            else b"\xff\xfe corrupt"
+        )
+    monkeypatch.setattr(replay, "_data_dir", lambda: tmp_path)
+    replay._bars.cache_clear()
+    replay._specs.cache_clear()
+    try:
+        async with Client(build_server(ServerConfig()), raise_exceptions=True) as client:
+            with pytest.raises(MCPError) as caught:
+                await client.call_tool("get_quote", {"symbol": SYMBOL})
+    finally:
+        replay._bars.cache_clear()
+        replay._specs.cache_clear()
+    code, message, _data = caught.value.args
+    assert code == INTERNAL_ERROR
+    assert f"{SYMBOL}.csv" in message
 
 
 @pytest.mark.anyio

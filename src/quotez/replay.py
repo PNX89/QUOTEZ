@@ -18,6 +18,15 @@ in a replay source is the quiet way a fixture becomes flaky.
 Files are read through `importlib.resources`, never `Path(__file__).parent`. The path join
 works in a source checkout and breaks under a zipped or editable install, which is the
 first thing `uvx` does.
+
+A file that cannot be read is `SourceUnavailable`, never a bare traceback and never an
+`InvalidRequest`. It is not a bad request: no argument the model can send will make a
+truncated wheel or a corrupt CSV readable, so it belongs on the protocol channel with the
+missing terminal rather than coming back as a tool result that invites a retry. Note which
+exceptions that means catching. `read_text` raises `OSError` when the file is missing or
+unreadable and `UnicodeDecodeError` when the bytes are not UTF-8, and `UnicodeDecodeError`
+is a `ValueError`: an `except OSError` alone looks thorough and lets the corrupt file
+through as a traceback.
 """
 
 from __future__ import annotations
@@ -27,10 +36,13 @@ import json
 from datetime import datetime
 from functools import cache, lru_cache
 from importlib import resources
+
+# importlib.resources.abc, not importlib.abc: the alias in the latter was removed in 3.14.
+from importlib.resources.abc import Traversable
 from typing import Any
 
 from quotez.aggregate import aggregate
-from quotez.errors import InvalidRequest, SymbolNotFound
+from quotez.errors import InvalidRequest, SourceUnavailable, SymbolNotFound
 from quotez.groups import match_group
 from quotez.models import (
     Account,
@@ -50,6 +62,8 @@ __all__ = ["ReplaySource"]
 
 CSV_COLUMNS = ("time", "open", "high", "low", "close", "tick_volume", "spread")
 
+SPECS_FILE = "symbols.json"
+
 # The replay account describes no real account and is shaped so that it cannot be mistaken
 # for one: a login of all zeros, a currency code that no broker issues, and round figures.
 # Every payload it appears in also carries synthetic=true.
@@ -59,35 +73,74 @@ REPLAY_BALANCE = 100_000.00
 REPLAY_LEVERAGE = 100
 
 
+def _data_dir() -> Traversable:
+    """The bundled data directory. A seam, so a test can point the reader at a broken file."""
+    return resources.files("quotez.data")
+
+
+def _read_data(filename: str) -> str:
+    """Text of one bundled data file, or `SourceUnavailable` naming the file and the reason.
+
+    Both clauses are load bearing. `OSError` is the missing or unreadable file, which is
+    what a wheel built without the package data produces. `UnicodeDecodeError` is a
+    `ValueError` and would sail past an `except OSError`, so a file with one stray byte in
+    it would reach a caller as a raw traceback instead of as the source failure it is.
+    """
+    try:
+        return _data_dir().joinpath(filename).read_text(encoding="utf-8")
+    except OSError as failure:
+        raise SourceUnavailable(
+            f"Replay data file {filename!r} could not be read: {failure}. The bundled files "
+            "ship inside the quotez package; reinstall it."
+        ) from failure
+    except UnicodeDecodeError as failure:
+        raise SourceUnavailable(
+            f"Replay data file {filename!r} is not valid UTF-8: {failure}."
+        ) from failure
+
+
 @lru_cache(maxsize=1)
 def _specs() -> dict[str, dict[str, Any]]:
     """The contract specifications, keyed by symbol, in file order."""
-    raw = resources.files("quotez.data").joinpath("symbols.json").read_text(encoding="utf-8")
-    return {entry["name"]: entry for entry in json.loads(raw)}
+    raw = _read_data(SPECS_FILE)
+    try:
+        return {entry["name"]: entry for entry in json.loads(raw)}
+    except (ValueError, TypeError, KeyError) as failure:
+        raise SourceUnavailable(
+            f"Replay data file {SPECS_FILE!r} is not a list of named instrument "
+            f"specifications: {failure!r}."
+        ) from failure
 
 
 @cache
 def _bars(symbol: str) -> tuple[Bar, ...]:
     """Every stored M1 bar for `symbol`, oldest first."""
-    text = resources.files("quotez.data").joinpath(f"{symbol}.csv").read_text(encoding="utf-8")
-    reader = csv.DictReader(text.splitlines())
+    filename = f"{symbol}.csv"
+    reader = csv.DictReader(_read_data(filename).splitlines())
     if tuple(reader.fieldnames or ()) != CSV_COLUMNS:
-        raise InvalidRequest(
-            f"Replay file for {symbol!r} has columns {reader.fieldnames}, expected "
+        raise SourceUnavailable(
+            f"Replay data file {filename!r} has columns {reader.fieldnames}, expected "
             f"{list(CSV_COLUMNS)}."
         )
-    return tuple(
-        Bar(
-            time=datetime.fromisoformat(row["time"]),
-            open=float(row["open"]),
-            high=float(row["high"]),
-            low=float(row["low"]),
-            close=float(row["close"]),
-            tick_volume=int(row["tick_volume"]),
-            spread=int(row["spread"]),
+    try:
+        return tuple(
+            Bar(
+                time=datetime.fromisoformat(row["time"]),
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=float(row["close"]),
+                tick_volume=int(row["tick_volume"]),
+                spread=int(row["spread"]),
+            )
+            for row in reader
         )
-        for row in reader
-    )
+    except (ValueError, TypeError) as failure:
+        # Pydantic's ValidationError is a ValueError, so a row that parses but does not
+        # validate, such as a naive timestamp, lands here too rather than escaping.
+        raise SourceUnavailable(
+            f"Replay data file {filename!r} has a row this source cannot read: {failure!r}."
+        ) from failure
 
 
 class ReplaySource:
