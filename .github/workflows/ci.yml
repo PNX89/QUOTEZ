@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }} python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    # UV_PYTHON pins the interpreter every uv command in the job resolves against. Without
+    # it `uv sync` is free to pick any interpreter satisfying requires-python, and the
+    # matrix would silently test one version four times.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          # macOS is required, not a nicety: the README claims the server runs with no
+          # MetaTrader install anywhere, and a Linux only matrix does not back that claim.
+          - os: macos-latest
+            python-version: "3.13"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv python install ${{ matrix.python-version }}
+      - run: uv sync --dev
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest
+
+  windows-mt5:
+    name: windows python 3.12 with the mt5 extra
+    runs-on: windows-latest
+    env:
+      UV_PYTHON: "3.12"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --dev --extra mt5
+      - run: uv run pytest
+      # The only place the Windows install path is exercised at all. There is no terminal on
+      # a runner, so the assertion is that the extension imports and that a missing terminal
+      # is reported as a clean SourceUnavailable rather than an AttributeError or a hang.
+      - name: The extension imports and a missing terminal is reported cleanly
+        shell: bash
+        run: |
+          uv run python -c '
+          import MetaTrader5
+
+          from quotez.errors import SourceUnavailable
+          from quotez.mt5source import Mt5Source
+
+          assert MetaTrader5.__name__ == "MetaTrader5"
+          try:
+              Mt5Source(timeout_ms=5000).connect()
+          except SourceUnavailable as failure:
+              assert "MetaTrader 5" in str(failure), failure
+          else:
+              raise SystemExit("connect() succeeded on a runner with no terminal")
+          '
+
+  macos-mt5-marker:
+    name: macos python 3.12, the mt5 extra resolves to nothing
+    runs-on: macos-latest
+    env:
+      UV_PYTHON: "3.12"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv venv
+      # MetaTrader5 publishes win_amd64 wheels and no source distribution, so without the
+      # environment marker this fails at RESOLUTION rather than at import. It must be a no-op.
+      - run: uv pip install '.[mt5]'
+      - name: The extra resolved to nothing and the package still imports
+        run: |
+          .venv/bin/python -c "
+          import importlib.util
+          assert importlib.util.find_spec('MetaTrader5') is None, 'the marker let MetaTrader5 in'
+          import quotez
+          print(quotez.__version__)
+          "
+
+  python-3-14:
+    name: ubuntu python 3.14 (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      UV_PYTHON: "3.14"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+      - run: uv python install 3.14
+      - run: uv sync --dev
+      - run: uv run pytest
