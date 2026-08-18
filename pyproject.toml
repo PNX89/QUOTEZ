@@ -37,9 +37,18 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 # The `cli` extra is what provides `mcp dev`, `mcp run` and `mcp install`. It is a dev
-# tool; the runtime dependency stays plain `mcp`.
+# tool; the runtime dependency stays plain `mcp`. `packaging` is here because
+# tests/test_package.py parses the distribution's own requirement markers with it; it used
+# to arrive only as a transitive dependency of pytest, which is not a thing to rely on.
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6", "anyio>=4.9", "mcp[cli]>=2.0.0,<3"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "anyio>=4.9",
+    "mcp[cli]>=2.0.0,<3",
+    "mypy>=1.11",
+    "packaging>=24",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quotez"]
@@ -54,3 +63,18 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+# `py.typed` and the `Typing :: Typed` classifier are promises to a consumer's type checker,
+# so something has to keep them true. `src` only, deliberately: the tests drive the SDK's
+# client, whose content lists are unions of five block types, and asserting on `.text` there
+# would need a cast or an isinstance guard at every call. That is noise in a test, and the
+# promise the marker makes is about the package a consumer imports.
+[tool.mypy]
+files = ["src"]
+strict = true
+
+# MetaTrader5 ships no stubs and no py.typed, and no wheel exists off Windows, so the import
+# is unresolvable on every runner in the matrix. `_mt5()` casts the result back to a module.
+[[tool.mypy.overrides]]
+module = "MetaTrader5"
+ignore_missing_imports = true

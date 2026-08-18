@@ -46,7 +46,7 @@ from __future__ import annotations
 import threading
 from datetime import UTC, datetime
 from types import ModuleType
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from quotez.errors import InvalidRequest, SourceUnavailable, SymbolNotFound
 from quotez.models import (
@@ -112,7 +112,9 @@ def _mt5() -> ModuleType:
         import MetaTrader5
     except ImportError as failure:
         raise SourceUnavailable(MISSING_PACKAGE_MESSAGE) from failure
-    return MetaTrader5
+    # The extension ships no stubs and no py.typed, so it is `Any` to a type checker on
+    # every platform, including the one where it is installed. The cast is where that stops.
+    return cast(ModuleType, MetaTrader5)
 
 
 def _position_type(code: int) -> Literal["buy", "sell"]:

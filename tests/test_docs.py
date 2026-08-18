@@ -216,6 +216,18 @@ def test_every_action_is_pinned_to_a_released_major_tag() -> None:
     assert set(uses) == {"actions/checkout@v7", "astral-sh/setup-uv@v10"}
 
 
+def test_every_command_the_readme_tells_a_reader_to_run_is_a_command_ci_runs() -> None:
+    # Otherwise the Development block drifts into a list of things that used to be checked,
+    # and a contributor who runs all of it can still be surprised by a red badge.
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    commands = [
+        line.strip() for line in section("Development").splitlines() if line.startswith("uv")
+    ]
+    assert len(commands) >= 4
+    missing = [command for command in commands if command not in workflow]
+    assert missing == []
+
+
 def test_the_workflow_covers_every_platform_and_version_the_readme_claims() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     badge = next(line for line in README.splitlines() if "img.shields.io/badge/python" in line)

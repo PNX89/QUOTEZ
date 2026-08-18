@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from importlib import metadata, resources
+from pathlib import Path
 
 from packaging.requirements import Requirement
 
 import quotez
+
+REPO = Path(__file__).resolve().parent.parent
+MANIFEST = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+WORKFLOW = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
 
 def test_version_matches_the_installed_distribution() -> None:
@@ -18,6 +24,30 @@ def test_py_typed_marker_ships_with_the_package() -> None:
     # Without this file in the wheel, every type hint in the package is invisible to a
     # consumer's type checker.
     assert resources.files("quotez").joinpath("py.typed").is_file()
+
+
+def test_the_typed_classifier_is_backed_by_a_type_checker_that_actually_runs() -> None:
+    """Shipping `py.typed` with nothing checking the hints is a claim with no test behind it.
+
+    The marker and the classifier tell a consumer's checker to trust every annotation in
+    this package. That is worth failing a build over, so the checker is configured here, run
+    in continuous integration, and asserted from both ends by this test.
+    """
+    assert "Typing :: Typed" in MANIFEST["project"]["classifiers"]
+    dev = MANIFEST["dependency-groups"]["dev"]
+    assert any(requirement.startswith("mypy") for requirement in dev)
+    settings = MANIFEST["tool"]["mypy"]
+    assert settings["strict"] is True
+    assert settings["files"] == ["src"]
+    assert "uv run mypy" in WORKFLOW
+
+
+def test_every_import_the_test_suite_makes_is_a_declared_dependency() -> None:
+    # `packaging` used to be imported here and declared nowhere, resolving only because
+    # pytest happens to depend on it. A pytest release that drops it would have broken this
+    # suite for a reason with nothing to do with the code.
+    declared = {Requirement(raw).name.lower() for raw in MANIFEST["dependency-groups"]["dev"]}
+    assert {"packaging", "pytest", "mypy", "ruff", "anyio", "mcp"} <= declared
 
 
 def test_public_names_are_importable() -> None:

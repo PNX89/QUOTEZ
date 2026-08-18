@@ -416,6 +416,7 @@ uv sync --dev
 uv run pytest
 uv run ruff check .
 uv run ruff format --check .
+uv run mypy
 ```
 
 209 tests, no network, a few seconds, and identical on macOS, Linux and Windows.

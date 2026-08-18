@@ -45,6 +45,10 @@ jobs:
       - run: uv sync --dev
       - run: uv run ruff check .
       - run: uv run ruff format --check .
+      # On every leg rather than once: the package claims 3.11 upwards, and a union or a
+      # generic that only type checks on the newest interpreter is exactly the kind of thing
+      # a single-version type check leg lets through.
+      - run: uv run mypy
       - run: uv run pytest
 
   windows-mt5:
