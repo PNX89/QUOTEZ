@@ -1,0 +1,56 @@
+[project]
+name = "quotez"
+version = "0.1.0"
+description = "MetaTrader 5 market data as typed, read-only MCP tools."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Quelin Zammit" }]
+keywords = ["mcp", "metatrader5", "market-data", "trading", "llm-tools"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Typing :: Typed",
+]
+dependencies = ["mcp>=2.0.0,<3"]
+
+# MetaTrader5 ships win_amd64 wheels only and no source distribution, so without this
+# marker `pip install quotez[mt5]` fails at RESOLUTION on macOS and Linux, before any
+# lazy import could help.
+[project.optional-dependencies]
+mt5 = ["MetaTrader5>=5.0.45,<6; sys_platform == 'win32'"]
+
+[project.scripts]
+quotez = "quotez.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/PNX89/QUOTEZ"
+Source = "https://github.com/PNX89/QUOTEZ"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The `cli` extra is what provides `mcp dev`, `mcp run` and `mcp install`. It is a dev
+# tool; the runtime dependency stays plain `mcp`.
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "anyio>=4.9", "mcp[cli]>=2.0.0,<3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quotez"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
