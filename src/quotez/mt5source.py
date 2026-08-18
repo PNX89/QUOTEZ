@@ -11,7 +11,20 @@ last_error. `symbol_select` is the one mutating call in that family and it is ne
 so a query cannot change the terminal's MarketWatch as a side effect. Neither `order_send`
 nor `order_check` appears anywhere in this package.
 
-Two traps this module exists to contain.
+This source does NOT roll bars up. It asks the terminal for the timeframe directly, because
+the terminal already holds every period and re-deriving them from M1 here would be slower
+and would disagree with the charts the operator has open. Two visible consequences, both in
+the README's Limitations: the terminal aligns D1 and H4 to the broker's server day rather
+than to UTC midnight, and it reports a `spread` on every timeframe where a locally rolled
+up bar reports none.
+
+Three traps this module exists to contain.
+
+The still forming bar: `copy_rates_from_pos` counts position 0 as the bar currently being
+built, so the obvious call returns a partial candle as the newest element and every high,
+low, close and volume in it is provisional. `get_bars` starts at position 1 instead, which
+is what makes the tool's promise that the newest bar is complete true here as well as on
+the replay source. The current price is `get_quote`'s job.
 
 Time zones: the terminal stores bar and tick times in UTC without any shift, but a Python
 `datetime` built without a tzinfo is resolved against the LOCAL zone. So every outbound
@@ -73,6 +86,12 @@ ORDER_TYPE_NAMES = {
 }
 
 POSITION_TYPE_NAMES: dict[int, Literal["buy", "sell"]] = {0: "buy", 1: "sell"}
+
+# `copy_rates_from_pos` numbers bars from the present backwards, and position 0 is the one
+# still being built. Starting at 1 is the difference between "the newest bar is complete",
+# which is what the get_bars tool tells the model, and a partial candle the model will read
+# as a closed one.
+FIRST_COMPLETE_BAR = 1
 
 # Every SymbolSpec field except the two QUOTEZ stamps on. The model's field names were
 # copied verbatim from symbol_info(), so reading them off the model instead of repeating
@@ -212,12 +231,16 @@ class Mt5Source:
         self._symbol_info(mt5, symbol)
         period = self._period(mt5, timeframe)
         with self._lock:
-            rates = mt5.copy_rates_from_pos(symbol, period, 0, count)
+            rates = mt5.copy_rates_from_pos(symbol, period, FIRST_COMPLETE_BAR, count)
         return self._wrap(symbol, timeframe, rates, mt5)
 
     def get_bars_range(
         self, symbol: str, timeframe: Timeframe, start: datetime, end: datetime
     ) -> BarSeries:
+        # No position arithmetic to do here, so no forming bar to skip either, EXCEPT when
+        # `end` reaches into the interval the terminal is still building. The bounds are the
+        # caller's, so that bar is returned rather than silently dropped, and the tool
+        # description says so.
         mt5 = self._terminal()
         self._symbol_info(mt5, symbol)
         period = self._period(mt5, timeframe)

@@ -205,11 +205,11 @@ def build_server(config: ServerConfig) -> MCPServer:
 
         Times are UTC and label each bar's OPEN, the left edge of the interval it covers.
         `count` is capped by the server (see the server instructions for the current
-        limit); ask for a coarser timeframe rather than more bars. The still forming bar is
-        not returned on any timeframe above M1, so the newest bar is always complete. An
-        unknown or unavailable symbol returns a tool error naming the symbol; call
-        list_symbols first if unsure. On the replay source the prices are generated, not
-        recorded from any market.
+        limit); ask for a coarser timeframe rather than more bars. The bar that is still
+        forming is never returned, so the newest bar is always a closed one; call get_quote
+        for the current price. An unknown or unavailable symbol returns a tool error naming
+        the symbol; call list_symbols first if unsure. On the replay source the prices are
+        generated, not recorded from any market.
         """
         if count > config.max_bars:
             raise InvalidRequest(
@@ -234,8 +234,10 @@ def build_server(config: ServerConfig) -> MCPServer:
         inclusive and `end` is exclusive, so consecutive ranges tile without repeating a
         bar. The number of bars the range spans is capped by the same limit that applies to
         get_bars, so a wide window at a fine timeframe returns a tool error asking for a
-        coarser one rather than a truncated answer. On the replay source the prices are
-        generated, not recorded from any market.
+        coarser one rather than a truncated answer. Unlike get_bars, an `end` that reaches
+        into the interval currently forming can return that bar, because the bounds are
+        yours; stop `end` at a closed interval if that matters. On the replay source the
+        prices are generated, not recorded from any market.
         """
         for name, moment in (("start", start), ("end", end)):
             if moment.tzinfo is None:

@@ -59,6 +59,11 @@ RATE_ROW = {
     "real_volume": 0,
 }
 
+# The bar the terminal is still building, one period on from RATE_ROW. Its tick_volume is
+# deliberately tiny, which is what a half formed candle looks like and what makes it
+# identifiable in an assertion.
+FORMING_ROW = {**RATE_ROW, "time": EPOCH_SECONDS + 3600, "tick_volume": 3, "close": 1.1001}
+
 
 class FakeTerminal(ModuleType):
     """Just enough MetaTrader5 to exercise the mapping, with the same return conventions.
@@ -99,7 +104,11 @@ class FakeTerminal(ModuleType):
         return (SPEC,)
 
     def copy_rates_from_pos(self, symbol: str, period: int, start: int, count: int) -> Any:
-        return [RATE_ROW]
+        self.last_from_pos = (symbol, period, start, count)
+        # Position 0 is the bar the terminal is still building, so the fake behaves like the
+        # real thing: asking from 0 hands back a partial candle as the newest element.
+        series = [FORMING_ROW, RATE_ROW]
+        return series[start : start + count]
 
     def copy_rates_range(self, symbol: str, period: int, start: Any, end: Any) -> Any:
         self.last_range = (start, end)
@@ -218,9 +227,34 @@ def test_epoch_seconds_become_utc_aware_datetimes(connected_source: Mt5Source) -
     assert connected_source.get_quote("EURUSD").time == bar.time
     assert (bar.open, bar.high, bar.low, bar.close) == (1.1, 1.102, 1.099, 1.1015)
     assert bar.tick_volume == 240
+    # Set on an H1 bar, unlike the replay source. See the spread test below for why.
     assert bar.spread == 12
     assert series.source == "mt5"
     assert series.synthetic is False
+
+
+def test_get_bars_never_returns_the_bar_the_terminal_is_still_building(
+    connected_source: Mt5Source, terminal: FakeTerminal
+) -> None:
+    """The get_bars tool tells the model its newest bar is closed. This is why that is true.
+
+    `copy_rates_from_pos` counts backwards from the present and position 0 is the bar being
+    built right now, so the obvious call returns a partial candle whose high, low, close and
+    volume are all provisional. A model reads it as a finished bar and restates it.
+    """
+    series = connected_source.get_bars("EURUSD", "H1", 1)
+    _, _, start, _ = terminal.last_from_pos
+    assert start == 1
+    assert [bar.time for bar in series.bars] == [datetime(2026, 6, 1, 8, 0, tzinfo=UTC)]
+    assert all(bar.tick_volume != FORMING_ROW["tick_volume"] for bar in series.bars)
+
+
+def test_the_terminal_reports_a_spread_on_every_timeframe(connected_source: Mt5Source) -> None:
+    # The mirror of the replay source, which clears `spread` on anything it rolled up. This
+    # source rolls nothing up, so the terminal's own value is passed through rather than
+    # discarded, and Bar.spread's description has to cover both.
+    for timeframe in ("M1", "H1", "D1"):
+        assert connected_source.get_bars("EURUSD", timeframe, 1).bars[0].spread == 12
 
 
 def test_a_range_query_passes_aware_datetimes_through(

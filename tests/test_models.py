@@ -14,6 +14,8 @@ from pydantic import BaseModel, ValidationError
 
 from quotez import models
 from quotez.models import Account, Bar, BarSeries, Quote
+from quotez.replay import ReplaySource
+from tests.conftest import SYMBOL
 
 ALL_MODELS = [
     value
@@ -46,6 +48,27 @@ def test_every_field_describes_itself(model: type[BaseModel]) -> None:
     # before deciding what to call and how to read the answer.
     missing = [name for name, field in model.model_fields.items() if not field.description]
     assert missing == []
+
+
+def test_the_spread_description_covers_both_sources_not_just_the_replay_one() -> None:
+    """`Bar.spread` is null above M1 on one source and set on the other, and the text says so.
+
+    This description travels in the output schema, so it is what the model believes about
+    the field. It used to read "present on M1 bars only", which is true of the replay
+    source, whose roll up clears it, and false of the MetaTrader source, which rolls nothing
+    up and hands the terminal's own per timeframe value straight through.
+    """
+    description = Bar.model_fields["spread"].description
+    assert description is not None
+    assert "rolled up locally" in description
+    assert "MetaTrader source rolls nothing up" in description
+    assert "M1 bars only" not in description
+
+    # The replay half of the claim, asserted against the source rather than trusted.
+    source = ReplaySource()
+    assert source.get_bars(SYMBOL, "M1", 1).bars[0].spread is not None
+    for timeframe in ("M5", "H1", "D1"):
+        assert source.get_bars(SYMBOL, timeframe, 1).bars[0].spread is None
 
 
 @pytest.mark.parametrize("model", LABELLED_MODELS, ids=lambda model: model.__name__)

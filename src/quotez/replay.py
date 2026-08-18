@@ -1,9 +1,15 @@
 """A `MarketDataSource` backed by the CSVs bundled in `quotez.data`.
 
-This is a real implementation of the protocol, not a mock. It stores M1 bars and rolls
-everything else up through `quotez.aggregate`, exactly as the MetaTrader source does, so
-the tool layer above cannot tell the two apart and the whole test suite exercises the real
-code path on a machine with no terminal installed.
+This is a real implementation of the protocol, not a mock. The tool layer above cannot tell
+it apart from the MetaTrader source, so the whole test suite exercises the real code path
+on a machine with no terminal installed.
+
+It stores M1 bars and rolls everything else up through `quotez.aggregate`. The MetaTrader
+source does not: a terminal already holds every period, so it is asked for the timeframe
+directly. The two answers therefore differ in two visible ways, both documented in the
+README's Limitations. D1 and H4 land on UTC boundaries here and on the broker's server day
+there, and `spread` is cleared on a bar rolled up here while the terminal reports one on
+every timeframe.
 
 Nothing here reads a clock. `get_quote` is derived from the last stored bar, which is what
 makes the README transcript reproducible and timestamp assertions stable. A wall clock read

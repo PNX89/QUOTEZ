@@ -28,7 +28,9 @@ First public release. Read only, stdio only.
   lazily, the connection is opened once in the server lifespan, and every timestamp is built UTC
   aware.
 - `quotez.aggregate`, rolling M1 bars up to M5, M15, M30, H1, H4 and D1 by wall clock buckets,
-  dropping incomplete trailing buckets and clearing `spread` on aggregated bars.
+  dropping incomplete trailing buckets and clearing `spread` on aggregated bars. It is the replay
+  source's roll up; `Mt5Source` asks the terminal for the timeframe instead, and the two therefore
+  differ on D1 and H4 alignment and on `spread`, as Limitations records.
 - `quotez.groups`, implementing MetaTrader's `symbols_get` group filter syntax for sources that
   have no terminal.
 - Configuration through flags or `QUOTEZ_*` variables: source, symbol whitelist, bar cap

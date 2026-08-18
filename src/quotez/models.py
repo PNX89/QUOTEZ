@@ -105,9 +105,11 @@ class Bar(BaseModel):
     close: float = Field(description="Last traded price in the interval.")
     tick_volume: int = Field(description="Number of price changes in the interval.")
     spread: int | None = Field(
-        description="Spread in points, present on M1 bars only. Null on any aggregated "
-        "timeframe, because a spread is a point in time quote property and summing it "
-        "across an interval would be meaningless."
+        description="Spread in points as the source reported it for this bar. Null on any "
+        "bar QUOTEZ rolled up locally, which is every timeframe above M1 on the replay "
+        "source, because a spread is a point in time quote property and summing it across "
+        "an interval would be meaningless. The MetaTrader source rolls nothing up: the "
+        "terminal returns its own spread on every timeframe, so this is set there."
     )
 
 

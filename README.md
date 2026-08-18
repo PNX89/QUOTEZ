@@ -241,10 +241,16 @@ many hosts. A test asserts no resource templates are registered.
 
 ## Timeframe aggregation
 
-The sources store one base timeframe, M1, and `quotez.aggregate` rolls up M5, M15, M30, H1, H4 and
-D1 from it. One stored copy, one roll up, testable on its own, which matters because its failure
-mode is silent: a wrong aggregation returns plausible numbers forever and never raises. The
-invariants, each of which is a test name:
+The replay source stores one base timeframe, M1, and `quotez.aggregate` rolls up M5, M15, M30, H1,
+H4 and D1 from it. One stored copy, one roll up, testable on its own, which matters because its
+failure mode is silent: a wrong aggregation returns plausible numbers forever and never raises.
+
+The MetaTrader source rolls nothing up. A terminal already holds every period, so it is asked for
+the timeframe directly; deriving them again from M1 would be slower and would disagree with the
+charts the operator has open. The two sources therefore answer the same call slightly differently
+on D1, H4 and `spread`, which is in Limitations rather than left for you to find.
+
+The invariants of the roll up, each of which is a test name:
 
 1. M1 is the only base timeframe. Everything coarser is derived.
 2. Buckets are wall clock, computed by floor division on the epoch second, never by grouping every
@@ -351,9 +357,22 @@ reinvented five times.
   terminal if it is not already running and waits up to 60 seconds. QUOTEZ opens the connection
   once in the server lifespan rather than per call, so that cost lands at startup instead of
   making the first tool call look hung.
+- **The two sources do not agree on where a D1 or an H4 bucket starts.** The replay roll up floors
+  on the epoch second, so D1 opens at 00:00 UTC and H4 at 00, 04, 08, 12, 16 and 20 UTC. A
+  MetaTrader terminal aligns D1 and H4 to the broker's server day, which is commonly UTC+2 or
+  UTC+3, so the same `get_bars(symbol, "D1")` returns a candle with a different open time and
+  different OHLC depending on which source is configured. Nothing here resamples the terminal's M1
+  to hide that, because a bar that disagrees with the operator's own chart is worse than a
+  documented offset.
+- For the same reason, `spread` is null on every replay bar above M1 and set on every MetaTrader
+  bar. The roll up clears it on purpose; the terminal reports its own value on every timeframe and
+  QUOTEZ passes that through rather than discarding data the source gave it.
 - `copy_rates_from_pos` and `copy_rates_range` are silently capped by the terminal's "Max. bars in
   chart" setting, so a request inside the server's own cap can still come back short and nothing
   in the MetaTrader API says so.
+- `get_bars` skips the bar the terminal is still building, so its newest bar is always closed.
+  `get_bars_range` does not, because the bounds are the caller's: an `end` inside the current
+  interval returns that interval's partial bar.
 - [`symbol_info()` returns
   `None`](https://www.mql5.com/en/docs/python_metatrader5/mt5symbolinfo_py) for an unknown symbol
   instead of raising, as does `symbols_get()` on error. Every call site here checks, but that is
