@@ -234,13 +234,17 @@ def test_the_readme_badge_points_at_a_workflow_that_exists() -> None:
     assert "actions/workflows/ci.yml/badge.svg" in README
 
 
-def test_every_action_is_pinned_to_a_released_major_tag() -> None:
+def test_every_action_is_pinned_to_a_released_tag() -> None:
     uses = re.findall(r"^\s*- uses: (\S+)$", WORKFLOW.read_text(encoding="utf-8"), re.MULTILINE)
     assert uses
-    # A floating ref such as @main would make a green badge unreproducible.
-    unpinned = [entry for entry in uses if not re.fullmatch(r"[\w.-]+/[\w.-]+@v\d+", entry)]
+    # A floating ref such as @main would make a green badge unreproducible. An exact
+    # version is accepted as well as a major tag: setup-uv publishes no moving major
+    # tag, so @v10 resolves to nothing and the job fails before it runs a step.
+    unpinned = [
+        entry for entry in uses if not re.fullmatch(r"[\w.-]+/[\w.-]+@v\d+(\.\d+){0,2}", entry)
+    ]
     assert unpinned == []
-    assert set(uses) == {"actions/checkout@v7", "astral-sh/setup-uv@v10"}
+    assert set(uses) == {"actions/checkout@v7", "astral-sh/setup-uv@v10.0.1"}
 
 
 def test_the_readme_states_the_number_of_tests_this_suite_actually_has() -> None:
