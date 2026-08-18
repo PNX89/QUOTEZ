@@ -4,11 +4,17 @@ On stdio, stdout is the JSON-RPC transport. A stray `print`, a banner or a log r
 to the wrong stream corrupts it, and the failure is a protocol parse error somewhere else
 entirely. Three of these tests exist only to make that impossible to reintroduce, including
 one that runs the real console script end to end and asserts stdout is empty to the byte.
+
+The environment tests run the installed console script in a subprocess rather than calling
+`main`. That is not belt and braces: the bug they exist to catch happened at IMPORT, so a
+test in this process could never see it, because the import had already succeeded before
+the test started.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -30,6 +36,19 @@ DASHES = ("\u2014", "\u2013")
 
 def source_files() -> list[Path]:
     return sorted(SOURCE_DIR.rglob("*.py"))
+
+
+def run_console(*args: str, **environment: str) -> subprocess.CompletedProcess[str]:
+    """Run the installed console script with a clean `QUOTEZ_*` environment plus `environment`."""
+    env = {key: value for key, value in os.environ.items() if not key.startswith("QUOTEZ_")}
+    return subprocess.run(
+        [str(QUOTEZ), *args],
+        input="",
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env | environment,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -181,6 +200,84 @@ def test_the_console_script_reports_its_version_on_stdout() -> None:
         [str(QUOTEZ), "--version"], capture_output=True, text=True, timeout=60, check=True
     )
     assert result.stdout == f"quotez {__version__}\n"
+
+
+# --------------------------------------------------------------------------------------
+# The environment, read at run time and not at import time
+
+
+def test_importing_the_package_reads_no_environment_variable() -> None:
+    # The root cause, asserted at its root. `quotez.cli` imports `quotez.server` to reach
+    # build_server, so a module level `mcp = build_server(ServerConfig.from_env())` made
+    # every malformed QUOTEZ_* variable fatal before main() ran, including for --help.
+    env = {key: value for key, value in os.environ.items() if not key.startswith("QUOTEZ_")}
+    malformed = {
+        "QUOTEZ_MAX_BARS": "abc",
+        "QUOTEZ_SOURCE": "binance",
+        "QUOTEZ_LOG_LEVEL": "loud",
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", "import quotez.server, quotez.cli\n"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env | malformed,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+
+
+@pytest.mark.skipif(not QUOTEZ.exists(), reason="console script not installed")
+@pytest.mark.parametrize("flag", ["--version", "--help"])
+def test_the_usage_flags_survive_a_malformed_environment(flag: str) -> None:
+    result = run_console(flag, QUOTEZ_MAX_BARS="abc", QUOTEZ_SOURCE="binance")
+    assert result.returncode == 0, result.stderr
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.skipif(not QUOTEZ.exists(), reason="console script not installed")
+@pytest.mark.parametrize(
+    ("variable", "value", "flag"),
+    [
+        ("QUOTEZ_MAX_BARS", "abc", ["--max-bars", "50"]),
+        ("QUOTEZ_MAX_BARS", "999999", ["--max-bars", "50"]),
+        ("QUOTEZ_SOURCE", "binance", ["--source", "replay"]),
+        ("QUOTEZ_LOG_LEVEL", "chatty", ["--log-level", "INFO"]),
+    ],
+)
+def test_a_flag_overrides_a_malformed_environment_default_in_the_real_binary(
+    variable: str, value: str, flag: list[str]
+) -> None:
+    # `build_parser` says defaults are left unvalidated so that a bad variable is not fatal
+    # when the caller replaced it. Asserting that in process proves nothing, because the
+    # import that used to fail happens before any test runs.
+    result = run_console(*flag, **{variable: value})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.skipif(not QUOTEZ.exists(), reason="console script not installed")
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        ("QUOTEZ_MAX_BARS", "abc"),
+        ("QUOTEZ_MAX_BARS", "999999"),
+        ("QUOTEZ_SOURCE", "binance"),
+        ("QUOTEZ_LOG_LEVEL", "chatty"),
+    ],
+)
+def test_an_unoverridden_malformed_variable_exits_two_the_way_an_argument_error_does(
+    variable: str, value: str
+) -> None:
+    # A host with a typo in its config env block should read "quotez: error: ..." and a
+    # usage line, not a Python stack trace, and the exit code is the one the module
+    # docstring promises for an argument error.
+    result = run_console(**{variable: value})
+    assert result.returncode == 2, result.stderr
+    assert "Traceback" not in result.stderr
+    assert "usage: quotez" in result.stderr
+    assert result.stdout == ""
 
 
 # --------------------------------------------------------------------------------------

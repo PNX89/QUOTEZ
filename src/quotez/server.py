@@ -23,6 +23,12 @@ carries `is_error=False` and reads as a successful answer.
 
 Stdout is the wire on stdio. There is no `print` in this package and nothing writes to
 stdout at import time; logging goes to stderr, configured in `quotez.cli`.
+
+Importing this module reads nothing and builds nothing. The `mcp` global that
+`mcp run src/quotez/server.py` looks for is built on first attribute access, not at import,
+because `quotez.cli` imports this module to reach `build_server` and an import that read
+`QUOTEZ_*` would make a malformed variable fatal before argparse could apply the flag that
+overrides it.
 """
 
 from __future__ import annotations
@@ -31,7 +37,7 @@ import math
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from mcp import MCPError
 from mcp.server import MCPServer
@@ -57,6 +63,12 @@ from quotez.protocol import MarketDataSource
 from quotez.replay import ReplaySource
 
 __all__ = ["build_server", "make_source", "mcp"]
+
+if TYPE_CHECKING:
+    # `mcp` is produced at run time by the module `__getattr__` at the bottom of this file.
+    # Declaring the type here is what lets a linter and a type checker see the name without
+    # anything being built at import.
+    mcp: MCPServer
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
@@ -316,6 +328,26 @@ def build_server(config: ServerConfig) -> MCPServer:
     return mcp
 
 
-# The module level global `mcp run src/quotez/server.py` looks for. It reads the
-# environment only and touches no terminal, because import time is not run time.
-mcp = build_server(ServerConfig.from_env())
+# Holds the global below once something has asked for it. Nothing builds it eagerly.
+_default_server: MCPServer | None = None
+
+
+def __getattr__(name: str) -> MCPServer:
+    """Build the module level `mcp` global on first access rather than at import.
+
+    `mcp run src/quotez/server.py` resolves the server by name, and both the `hasattr` probe
+    and the `getattr` that follows it fall through to here, so that entry point is unchanged
+    and still configured entirely by `QUOTEZ_*`.
+
+    What changes is the console script. `quotez.cli` imports this module for `build_server`,
+    so a global built at import made every `QUOTEZ_*` variable fatal before `main` ran:
+    `QUOTEZ_MAX_BARS=abc quotez --max-bars 50` died with a traceback and exit 1 despite the
+    flag that replaced the offending value, and so did `--help` and `--version`. Argument
+    errors are argparse's to report, and argparse exits 2.
+    """
+    if name != "mcp":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    global _default_server
+    if _default_server is None:
+        _default_server = build_server(ServerConfig.from_env())
+    return _default_server

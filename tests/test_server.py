@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from mcp import Client
+from mcp.server import MCPServer
 from mcp.types import Tool
 
 from quotez import __version__
@@ -124,6 +125,22 @@ async def test_the_server_identifies_itself_with_the_package_version(client: Cli
     assert info.name == "QUOTEZ"
     assert info.title == "QUOTEZ market data"
     assert info.version == __version__
+
+
+def test_the_module_global_is_built_lazily_and_only_once() -> None:
+    # `mcp run src/quotez/server.py` resolves the server by probing the module for the names
+    # mcp, server and app, so the global has to answer hasattr and getattr. It is built on
+    # first access rather than at import, which is what keeps a malformed QUOTEZ_* variable
+    # from killing the console script before argparse can override it.
+    import quotez.server as module
+
+    assert module._default_server is None or isinstance(module._default_server, MCPServer)
+    assert hasattr(module, "mcp")
+    first = module.mcp
+    assert isinstance(first, MCPServer)
+    assert module.mcp is first
+    with pytest.raises(AttributeError, match="no attribute 'app'"):
+        module.app  # noqa: B018
 
 
 def test_building_an_mt5_server_touches_no_terminal() -> None:
