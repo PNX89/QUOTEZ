@@ -30,8 +30,9 @@ REPO = Path(__file__).resolve().parent.parent
 SOURCE_DIR = REPO / "src" / "quotez"
 QUOTEZ = Path(sys.executable).parent / "quotez"
 
-# Em dash and en dash, spelled as escapes so this file cannot fail its own check.
-DASHES = ("\u2014", "\u2013")
+# Files that are not text and are never expected to be. Nothing matches today; the list is
+# here so that adding a screenshot later fails review rather than the suite.
+BINARY_SUFFIXES = {".gif", ".ico", ".jpg", ".jpeg", ".pdf", ".png", ".woff", ".woff2", ".zip"}
 
 
 def source_files() -> list[Path]:
@@ -281,29 +282,52 @@ def test_an_unoverridden_malformed_variable_exits_two_the_way_an_argument_error_
 
 
 # --------------------------------------------------------------------------------------
-# Prose hygiene
+# Encoding hygiene
 
 
 def repository_text_files() -> list[Path]:
-    """Every readable text file in the repository, including LICENSE and CI workflows.
+    """Every text file in the repository, including LICENSE and CI workflows.
 
     Selected by exclusion rather than by extension, so a file type nobody thought of, such
     as a workflow YAML added later, is covered the day it appears.
     """
-    skipped = {".git", ".venv", ".ruff_cache", ".pytest_cache", "__pycache__", "uv.lock"}
+    skipped = {
+        ".git",
+        ".venv",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "__pycache__",
+        "uv.lock",
+    }
     return [
-        path for path in sorted(REPO.rglob("*")) if path.is_file() and not skipped & set(path.parts)
+        path
+        for path in sorted(REPO.rglob("*"))
+        if path.is_file()
+        and not skipped & set(path.parts)
+        and path.suffix.lower() not in BINARY_SUFFIXES
     ]
 
 
-def test_no_file_in_the_repository_uses_an_em_or_en_dash() -> None:
+def test_every_text_file_in_the_repository_is_pure_ascii() -> None:
+    """No byte above 0x7F in anything shipped, prose and code alike.
+
+    This is a stdio server. Tool descriptions, error strings and log records are written by
+    this package and read back by a host, and on Windows that host's console is frequently
+    still cp1252, which cannot encode a typographic dash, a smart quote or a non breaking
+    space. Restricting the whole tree to ASCII means no string in it can depend on the
+    console the host happens to have, and it removes a class of diff noise where a pasted
+    character looks identical to the one next to it.
+
+    Bytes rather than text on purpose: decoding first would let a file that is not UTF-8 at
+    all be skipped as undecodable, which is the opposite of what a hygiene check should do.
+    """
     checked, offenders = 0, []
     for path in repository_text_files():
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
+        data = path.read_bytes()
         checked += 1
-        offenders += [(str(path.relative_to(REPO)), dash) for dash in DASHES if dash in text]
+        offenders += [
+            (str(path.relative_to(REPO)), hex(byte)) for byte in sorted(set(data)) if byte > 0x7F
+        ]
     assert checked > 20
     assert offenders == []
