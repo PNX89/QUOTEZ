@@ -273,8 +273,18 @@ because a session ending is not the same event as the data running out.
 
 The claim is structural, not configurable. **This codebase contains no write path.** There is no
 `order_send`, no `order_check`, no `symbol_select`, no MarketWatch mutation and no file write
-anywhere in `src/quotez/`, and a test greps the package for each of those three MetaTrader calls.
-No configuration can turn a write on, because there is nothing to turn on.
+anywhere in `src/quotez/`. No configuration can turn a write on, because there is nothing to turn
+on.
+
+Two tests hold that in place, and the second one is the one that means something. The first greps
+the package for those three MetaTrader calls: cheap, covers every file, and satisfied by a name
+assembled at run time. The second walks the AST of `mt5source.py` and asserts the positive
+property instead, that the set of attributes this package reads off the terminal module is exactly
+the read calls its own docstring names plus the seven timeframe constants, with nothing reached
+through `getattr` and nothing rebound to a second variable. `_mt5()` returns the whole MetaTrader5
+module, so the absence of three names out of several hundred attributes proves very little on its
+own. Five deliberately broken snippets are checked against that walk so the walk itself is known
+to fail when it should.
 
 Every tool is declared `ToolAnnotations(read_only_hint=True, open_world_hint=False)`. That
 declaration is a courtesy to clients and nothing more: the MCP specification tells clients to

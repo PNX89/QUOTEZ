@@ -146,6 +146,15 @@ def test_the_readme_states_the_read_only_claim_before_anything_else() -> None:
     assert tagline == "**Market data for agents. Read only by construction, not by configuration.**"
 
 
+def test_the_readme_describes_both_halves_of_the_read_only_check() -> None:
+    # The grep alone was the claim for a while, and a grep is defeated by a computed name.
+    # If the AST walk is ever dropped, the prose has to stop advertising it.
+    safety = " ".join(section("Safety design").split())
+    assert "greps the package" in safety
+    assert "walks the AST" in safety
+    assert "getattr" in safety
+
+
 def test_the_readme_admits_the_requirement_that_is_not_implemented() -> None:
     safety = section("Safety design")
     rate_limit = next(row for row in safety.splitlines() if "Rate limit" in row)
