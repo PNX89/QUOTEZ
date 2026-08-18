@@ -25,8 +25,9 @@ First public release. Read only, stdio only.
   `importlib.resources`. It reads no clock: `get_quote` derives from the last stored bar, which is
   what makes the README transcript reproducible.
 - `Mt5Source`, reading a live terminal through read only calls only. The extension is imported
-  lazily, the connection is opened once in the server lifespan, and every timestamp is built UTC
-  aware.
+  lazily, the connection is opened once in the server lifespan, every timestamp is built UTC aware,
+  and `get_bars` starts at the first closed bar so the newest one it returns is never the bar the
+  terminal is still building.
 - `quotez.aggregate`, rolling M1 bars up to M5, M15, M30, H1, H4 and D1 by wall clock buckets,
   dropping incomplete trailing buckets and clearing `spread` on aggregated bars. It is the replay
   source's roll up; `Mt5Source` asks the terminal for the timeframe instead, and the two therefore
@@ -36,10 +37,15 @@ First public release. Read only, stdio only.
 - Configuration through flags or `QUOTEZ_*` variables: source, symbol whitelist, bar cap
   (default 1000, ceiling 5000) and log level, all validated at startup.
 - Errors split across the two MCP channels: `SymbolNotFound` and `InvalidRequest` as ordinary
-  exceptions the model can retry from, `SourceUnavailable` as an `MCPError` protocol error.
+  exceptions the model can retry from, `SourceUnavailable` as an `MCPError` protocol error. A
+  bundled data file that is missing, unreadable or not UTF-8 is `SourceUnavailable` naming the
+  file, because no argument the model can send will make it readable.
 - `examples/agent_session.py`, which prints the README transcript from an in-process client, and a
   test asserting the README block matches it byte for byte.
 - Continuous integration on Ubuntu 3.11 to 3.13, macOS 3.13, a Windows 3.12 job exercising the
   `mt5` extra, a macOS job proving that extra is a no-op off Windows, and an advisory 3.14 job.
+  Every version leg runs `ruff check`, `ruff format --check`, `mypy --strict` over `src` and the
+  test suite, so the `py.typed` marker this package ships is backed by a check rather than by
+  intent.
 
 [0.1.0]: https://github.com/PNX89/QUOTEZ/releases/tag/v0.1.0
