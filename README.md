@@ -9,9 +9,9 @@
 ![A real run of the demo: an agent listing symbols, pulling a quote and pulling bars, every
 payload carrying its source and a synthetic flag](docs/demo.svg)
 
-That frame is generated from `docs/evidence/demo.txt`, which is the captured output of a real
-run and is asserted against a live one by the test suite. The playback cadence is chosen; not a
-word of the text is. The whole run, untruncated, is at
+Nothing above was typed by hand. The frame replays what the session actually printed, and this
+repository's own suite re-runs it on every push and diffs the result, so an out of date picture
+is a red build rather than a flattering one. Untruncated at
 [pnx89.github.io/QUOTEZ](https://pnx89.github.io/QUOTEZ/).
 
 An MCP server that exposes MetaTrader 5 market data as typed, read only tools an LLM agent can
