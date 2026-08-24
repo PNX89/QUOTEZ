@@ -348,16 +348,11 @@ def test_the_card_states_numbers_that_are_true_today() -> None:
     match = re.search(r"^(\d+) tests? collected", result.stdout, re.MULTILINE)
     assert match is not None
     assert facts["tests"] == int(match.group(1)), "facts.json's test total is stale"
-    assert (
-        facts["release"]
-        == subprocess.run(
-            ["git", "describe", "--tags", "--abbrev=0"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=REPO,
-        ).stdout.strip()
-    )
+    # Against the package version, not against `git describe`. actions/checkout clones without
+    # tags, so a git-based assertion passes on a developer machine and fails in CI for a reason
+    # that has nothing to do with the thing being tested. This is also the stronger claim: it
+    # ties the release the card advertises to the version the wheel would carry.
+    assert facts["release"] == f"v{__version__}"
     card = (REPO / "site" / "index.html").read_text(encoding="utf-8")
     assert f"<dd>{facts['tests']}</dd>" in card
     assert f"<dd>{facts['release']}</dd>" in card
