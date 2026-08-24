@@ -12,6 +12,7 @@ the workflow that has to exist for the badge at the top of the README to mean an
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -293,3 +294,67 @@ def test_the_workflow_covers_every_platform_and_version_the_readme_claims() -> N
     # The macOS job is what backs the README's claim that this runs with no MetaTrader
     # install anywhere, so it is asserted rather than left to the matrix.
     assert "uv pip install '.[mt5]'" in workflow
+
+
+def _escaped(text: str) -> str:
+    """The card is HTML, so the captured output appears in it escaped, not raw."""
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def test_the_committed_demo_output_still_matches_a_live_run() -> None:
+    """The Pages card publishes this output, so a stale copy is a lie on a public page.
+
+    The card is generated outside this repository and committed, because the generator is
+    deliberately not a repository and no CI job here could check it out. That puts the
+    freshness burden here instead, which is the right place: this is the only test suite that
+    can run the demo and compare.
+    """
+    committed = (REPO / "docs" / "evidence" / "demo.txt").read_text(encoding="utf-8")
+    live = subprocess.run(
+        [sys.executable, "examples/agent_session.py"],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=True,
+        cwd=REPO,
+    ).stdout
+    assert committed == live, (
+        "docs/evidence/demo.txt no longer matches a live run. "
+        "Run: uv run python scripts/capture_evidence.py, then regenerate the card."
+    )
+
+
+def test_the_published_card_carries_the_output_it_claims_to() -> None:
+    card = (REPO / "site" / "index.html").read_text(encoding="utf-8")
+    demo = (REPO / "docs" / "evidence" / "demo.txt").read_text(encoding="utf-8")
+    assert _escaped(demo.rstrip()) in card, "the card's terminal block is not the captured output"
+    # The claim the note on the card makes about itself has to be true, and this is the test
+    # it points at. If this assertion is ever deleted, that sentence becomes false.
+    assert "a test fails when it" in card
+
+
+def test_the_card_states_numbers_that_are_true_today() -> None:
+    facts = json.loads((REPO / "docs" / "evidence" / "facts.json").read_text(encoding="utf-8"))
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-o", "addopts=", "--collect-only", "-q"],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=True,
+        cwd=REPO,
+    )
+    match = re.search(r"^(\d+) tests? collected", result.stdout, re.MULTILINE)
+    assert match is not None
+    assert facts["tests"] == int(match.group(1)), "facts.json's test total is stale"
+    assert facts["release"] == subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"],
+        capture_output=True, text=True, check=True, cwd=REPO,
+    ).stdout.strip()
+    card = (REPO / "site" / "index.html").read_text(encoding="utf-8")
+    assert f"<dd>{facts['tests']}</dd>" in card
+    assert f"<dd>{facts['release']}</dd>" in card

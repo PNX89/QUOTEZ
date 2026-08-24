@@ -1,0 +1,69 @@
+QUOTEZ over an in-memory MCP client, source=replay.
+Every price below is generated. This repository bundles no real market data.
+
+>>> list_symbols(group="*FX*")
+{
+  "source": "replay",
+  "synthetic": true,
+  "count": 2,
+  "symbols": [
+    {"name": "SYNTH_FX_ALPHA", "description": "Synthetic FX pair Alpha", "digits": 5, "point": 1e-05},
+    {"name": "SYNTH_FX_BETA", "description": "Synthetic FX pair Beta", "digits": 3, "point": 0.001}
+  ]
+}
+
+>>> get_quote(symbol="SYNTH_FX_ALPHA")
+{
+  "symbol": "SYNTH_FX_ALPHA",
+  "time": "2026-06-12T13:59:00Z",
+  "bid": 1.08044,
+  "ask": 1.08056,
+  "spread_points": 12,
+  "source": "replay",
+  "synthetic": true
+}
+
+>>> get_bars(symbol="SYNTH_FX_ALPHA", timeframe="H1", count=5)
+{
+  "symbol": "SYNTH_FX_ALPHA",
+  "timeframe": "H1",
+  "source": "replay",
+  "synthetic": true,
+  "count": 5,
+  "bars": [
+    {"time": "2026-06-12T08:00:00Z", "open": 1.07985, "high": 1.08231, "low": 1.07978, "close": 1.08125, "tick_volume": 4257, "spread": null},
+    {"time": "2026-06-12T09:00:00Z", "open": 1.08125, "high": 1.0844, "low": 1.08113, "close": 1.08302, "tick_volume": 2501, "spread": null},
+    {"time": "2026-06-12T10:00:00Z", "open": 1.08302, "high": 1.08439, "low": 1.08298, "close": 1.08368, "tick_volume": 1643, "spread": null},
+    {"time": "2026-06-12T11:00:00Z", "open": 1.08368, "high": 1.08395, "low": 1.08036, "close": 1.08097, "tick_volume": 1570, "spread": null},
+    {"time": "2026-06-12T12:00:00Z", "open": 1.08097, "high": 1.08284, "low": 1.08084, "close": 1.08159, "tick_volume": 2589, "spread": null}
+  ]
+}
+
+>>> symbol_info(symbol="SYNTH_FX_ALPHA")
+{
+  "name": "SYNTH_FX_ALPHA",
+  "description": "Synthetic FX pair Alpha",
+  "digits": 5,
+  "point": 1e-05,
+  "spread": 12,
+  "spread_float": true,
+  "trade_stops_level": 10,
+  "trade_freeze_level": 0,
+  "trade_tick_value": 1.0,
+  "trade_tick_size": 1e-05,
+  "trade_contract_size": 100000.0,
+  "volume_min": 0.01,
+  "volume_max": 100.0,
+  "volume_step": 0.01,
+  "currency_base": "SYA",
+  "currency_profit": "SYN",
+  "currency_margin": "SYA",
+  "source": "replay",
+  "synthetic": true
+}
+
+A symbol that does not exist, to show what the model actually sees:
+
+>>> get_quote(symbol="NOT_A_SYMBOL")
+is_error: true
+Error executing tool get_quote: Symbol 'NOT_A_SYMBOL' is not available on this server.
