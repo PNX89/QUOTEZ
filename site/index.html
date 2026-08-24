@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QUOTEZ</title>
+<meta name="description" content="market data an agent can read and cannot act on">
+<style>
+  /* Light is defined on bare :root so a viewer with no preference gets a complete palette,
+     and only the tokens that differ are redefined for dark. */
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfbfa; --fg: #1a1a18; --muted: #55554e; --rule: #dedcd4;
+    --term-bg: #f4f3ee; --term-fg: #23231f; --accent: #7a4b12;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a; --fg: #e9e8e3; --muted: #a2a19a; --rule: #2e2e34;
+      --term-bg: #101014; --term-fg: #dcdbd4; --accent: #d9a441;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 3rem 1.25rem 5rem;
+    background: var(--bg); color: var(--fg);
+    font: 16px/1.65 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  h1 { font-size: 2.25rem; letter-spacing: -0.02em; margin: 0 0 .35rem; }
+  .blurb { color: var(--muted); margin: 0 0 2rem; font-size: 1.05rem; }
+  .claim { font-size: 1.2rem; line-height: 1.5; margin: 0 0 2rem; border-left: 3px solid var(--accent); padding-left: 1rem; }
+  .facts { display: flex; flex-wrap: wrap; gap: 1.5rem; padding: 1rem 0; margin: 0 0 2rem;
+           border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .facts div { font-size: .9rem; }
+  .facts dt { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .07em; }
+  .facts dd { margin: .15rem 0 0; font-variant-numeric: tabular-nums; }
+  h2 { font-size: .78rem; text-transform: uppercase; letter-spacing: .09em; color: var(--muted);
+       margin: 2.5rem 0 .5rem; font-weight: 600; }
+  .cmd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem;
+         color: var(--muted); margin: 0 0 .5rem; }
+  /* Wide output scrolls inside its own box. The page body never scrolls sideways. */
+  pre { background: var(--term-bg); color: var(--term-fg); padding: 1.25rem; border-radius: 6px;
+        overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: .8rem; line-height: 1.5; margin: 0; }
+  .note { color: var(--muted); font-size: .82rem; margin: .6rem 0 0; }
+  ul { list-style: none; padding: 0; margin: .5rem 0 0; }
+  li { padding: .35rem 0; border-bottom: 1px solid var(--rule); }
+  li span { color: var(--muted); font-size: .88rem; }
+  a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  a:hover { color: var(--accent); }
+  footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--rule);
+           color: var(--muted); font-size: .82rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>QUOTEZ</h1>
+  <p class="blurb">market data an agent can read and cannot act on.</p>
+
+  <p class="claim">An agent that can read a market can also trade it, unless the tools it is handed cannot. This server hands out prices and nothing else, and no order-placement code exists in it to be tricked into running.</p>
+
+  <dl class="facts">
+    <div><dt>Tests</dt><dd>254</dd></div>
+    <div><dt>Python</dt><dd>3.11 to 3.14</dd></div>
+    <div><dt>Release</dt><dd>v0.1.0</dd></div>
+    <div><dt>Licence</dt><dd>MIT</dd></div>
+  </dl>
+
+  <h2>The demo, as it really ran</h2>
+  <p class="cmd">$ uv run python examples/agent_session.py</p>
+  <pre>QUOTEZ over an in-memory MCP client, source=replay.
+Every price below is generated. This repository bundles no real market data.
+
+&gt;&gt;&gt; list_symbols(group=&quot;*FX*&quot;)
+{
+  &quot;source&quot;: &quot;replay&quot;,
+  &quot;synthetic&quot;: true,
+  &quot;count&quot;: 2,
+  &quot;symbols&quot;: [
+    {&quot;name&quot;: &quot;SYNTH_FX_ALPHA&quot;, &quot;description&quot;: &quot;Synthetic FX pair Alpha&quot;, &quot;digits&quot;: 5, &quot;point&quot;: 1e-05},
+    {&quot;name&quot;: &quot;SYNTH_FX_BETA&quot;, &quot;description&quot;: &quot;Synthetic FX pair Beta&quot;, &quot;digits&quot;: 3, &quot;point&quot;: 0.001}
+  ]
+}
+
+&gt;&gt;&gt; get_quote(symbol=&quot;SYNTH_FX_ALPHA&quot;)
+{
+  &quot;symbol&quot;: &quot;SYNTH_FX_ALPHA&quot;,
+  &quot;time&quot;: &quot;2026-06-12T13:59:00Z&quot;,
+  &quot;bid&quot;: 1.08044,
+  &quot;ask&quot;: 1.08056,
+  &quot;spread_points&quot;: 12,
+  &quot;source&quot;: &quot;replay&quot;,
+  &quot;synthetic&quot;: true
+}
+
+&gt;&gt;&gt; get_bars(symbol=&quot;SYNTH_FX_ALPHA&quot;, timeframe=&quot;H1&quot;, count=5)
+{
+  &quot;symbol&quot;: &quot;SYNTH_FX_ALPHA&quot;,
+  &quot;timeframe&quot;: &quot;H1&quot;,
+  &quot;source&quot;: &quot;replay&quot;,
+  &quot;synthetic&quot;: true,
+  &quot;count&quot;: 5,
+  &quot;bars&quot;: [
+    {&quot;time&quot;: &quot;2026-06-12T08:00:00Z&quot;, &quot;open&quot;: 1.07985, &quot;high&quot;: 1.08231, &quot;low&quot;: 1.07978, &quot;close&quot;: 1.08125, &quot;tick_volume&quot;: 4257, &quot;spread&quot;: null},
+    {&quot;time&quot;: &quot;2026-06-12T09:00:00Z&quot;, &quot;open&quot;: 1.08125, &quot;high&quot;: 1.0844, &quot;low&quot;: 1.08113, &quot;close&quot;: 1.08302, &quot;tick_volume&quot;: 2501, &quot;spread&quot;: null},
+    {&quot;time&quot;: &quot;2026-06-12T10:00:00Z&quot;, &quot;open&quot;: 1.08302, &quot;high&quot;: 1.08439, &quot;low&quot;: 1.08298, &quot;close&quot;: 1.08368, &quot;tick_volume&quot;: 1643, &quot;spread&quot;: null},
+    {&quot;time&quot;: &quot;2026-06-12T11:00:00Z&quot;, &quot;open&quot;: 1.08368, &quot;high&quot;: 1.08395, &quot;low&quot;: 1.08036, &quot;close&quot;: 1.08097, &quot;tick_volume&quot;: 1570, &quot;spread&quot;: null},
+    {&quot;time&quot;: &quot;2026-06-12T12:00:00Z&quot;, &quot;open&quot;: 1.08097, &quot;high&quot;: 1.08284, &quot;low&quot;: 1.08084, &quot;close&quot;: 1.08159, &quot;tick_volume&quot;: 2589, &quot;spread&quot;: null}
+  ]
+}
+
+&gt;&gt;&gt; symbol_info(symbol=&quot;SYNTH_FX_ALPHA&quot;)
+{
+  &quot;name&quot;: &quot;SYNTH_FX_ALPHA&quot;,
+  &quot;description&quot;: &quot;Synthetic FX pair Alpha&quot;,
+  &quot;digits&quot;: 5,
+  &quot;point&quot;: 1e-05,
+  &quot;spread&quot;: 12,
+  &quot;spread_float&quot;: true,
+  &quot;trade_stops_level&quot;: 10,
+  &quot;trade_freeze_level&quot;: 0,
+  &quot;trade_tick_value&quot;: 1.0,
+  &quot;trade_tick_size&quot;: 1e-05,
+  &quot;trade_contract_size&quot;: 100000.0,
+  &quot;volume_min&quot;: 0.01,
+  &quot;volume_max&quot;: 100.0,
+  &quot;volume_step&quot;: 0.01,
+  &quot;currency_base&quot;: &quot;SYA&quot;,
+  &quot;currency_profit&quot;: &quot;SYN&quot;,
+  &quot;currency_margin&quot;: &quot;SYA&quot;,
+  &quot;source&quot;: &quot;replay&quot;,
+  &quot;synthetic&quot;: true
+}
+
+A symbol that does not exist, to show what the model actually sees:
+
+&gt;&gt;&gt; get_quote(symbol=&quot;NOT_A_SYMBOL&quot;)
+is_error: true
+Error executing tool get_quote: Symbol 'NOT_A_SYMBOL' is not available on this server.</pre>
+  <p class="note">Output captured on 2026-08-24. It is committed to the repository and a test fails when it
+    stops matching a live run, so this page cannot quietly drift from the code it describes.</p>
+
+  <h2>Read it</h2>
+  <ul>
+    <li><a href="https://github.com/PNX89/QUOTEZ">Source on GitHub</a> <span>the README carries the argument in full</span></li>
+    <li><a href="https://github.com/PNX89/QUOTEZ/releases/tag/v0.1.0">Release v0.1.0</a> <span>changelog and tag</span></li>
+  </ul>
+
+  <h2>The rest of the toolset</h2>
+  <ul>
+      <li><a href="https://pnx89.github.io/QUACKZ/">QUACKZ</a> <span>deflating a backtest that only looks good because it was picked out of two hundred</span></li>
+      <li><a href="https://pnx89.github.io/QUELLZ/">QUELLZ</a> <span>measuring what prompt-injection containment costs in utility as well as in attack rate</span></li>
+      <li><a href="https://pnx89.github.io/QUIDZ/">QUIDZ</a> <span>refusing the outbound payment that would have gone out twice</span></li>
+      <li><a href="https://pnx89.github.io/QUESTZ/">QUESTZ</a> <span>stopping a scraper before it writes a CSV from a page that changed shape</span></li>
+  </ul>
+
+  <footer>Quelin Zammit. Built for the failure that does not announce itself.</footer>
+</main>
+</body>
+</html>
