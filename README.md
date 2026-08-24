@@ -2,6 +2,9 @@
 
 **Market data for agents. Read only by construction, not by configuration.**
 
+One file to start with: [`src/quotez/server.py`](src/quotez/server.py). Eight tools in a fixed
+registration order, and no write path anywhere in it to find.
+
 [![CI](https://github.com/PNX89/QUOTEZ/actions/workflows/ci.yml/badge.svg)](https://github.com/PNX89/QUOTEZ/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
