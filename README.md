@@ -6,6 +6,14 @@
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+![A real run of the demo: an agent listing symbols, pulling a quote and pulling bars, every
+payload carrying its source and a synthetic flag](docs/demo.svg)
+
+That frame is generated from `docs/evidence/demo.txt`, which is the captured output of a real
+run and is asserted against a live one by the test suite. The playback cadence is chosen; not a
+word of the text is. The whole run, untruncated, is at
+[pnx89.github.io/QUOTEZ](https://pnx89.github.io/QUOTEZ/).
+
 An MCP server that exposes MetaTrader 5 market data as typed, read only tools an LLM agent can
 call. Python 3.11 or newer, one runtime dependency, stdio transport. The badge stops at 3.13
 because that is where the classifiers stop; CI runs a 3.14 leg as well, marked advisory, and 3.14
@@ -430,7 +438,7 @@ uv run ruff format --check .
 uv run mypy
 ```
 
-254 tests, no network, a few seconds, and identical on macOS, Linux and Windows. That count is
+255 tests, no network, a few seconds, and identical on macOS, Linux and Windows. That count is
 asserted against a real collection run, because a number in a README is a number nobody updates.
 
 ## License
