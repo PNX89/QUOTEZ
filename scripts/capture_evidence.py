@@ -59,7 +59,29 @@ def python_range() -> str:
 
 
 def release() -> str:
-    return run("git", "describe", "--tags", "--abbrev=0").strip()
+    """From the package version, cross-checked against the tag when one is reachable.
+
+    `git describe` alone would be wrong here: a shallow checkout has no tags, and a version
+    bumped without tagging would still report the old tag. The version is the claim; the tag
+    is checked against it locally, where tags exist, so a mismatch is caught at capture time
+    rather than published.
+    """
+    from quotez import __version__
+
+    tag = f"v{__version__}"
+    result = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"],
+        capture_output=True,
+        text=True,
+        cwd=REPO,
+    )
+    described = result.stdout.strip()
+    if result.returncode == 0 and described != tag:
+        raise SystemExit(
+            f"the newest tag is {described} but the package version is {__version__}. "
+            "Tag the release or fix the version before publishing a card that names one."
+        )
+    return tag
 
 
 def main() -> int:
