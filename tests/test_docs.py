@@ -299,10 +299,7 @@ def test_the_workflow_covers_every_platform_and_version_the_readme_claims() -> N
 def _escaped(text: str) -> str:
     """The card is HTML, so the captured output appears in it escaped, not raw."""
     return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
 
 
@@ -351,10 +348,16 @@ def test_the_card_states_numbers_that_are_true_today() -> None:
     match = re.search(r"^(\d+) tests? collected", result.stdout, re.MULTILINE)
     assert match is not None
     assert facts["tests"] == int(match.group(1)), "facts.json's test total is stale"
-    assert facts["release"] == subprocess.run(
-        ["git", "describe", "--tags", "--abbrev=0"],
-        capture_output=True, text=True, check=True, cwd=REPO,
-    ).stdout.strip()
+    assert (
+        facts["release"]
+        == subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=REPO,
+        ).stdout.strip()
+    )
     card = (REPO / "site" / "index.html").read_text(encoding="utf-8")
     assert f"<dd>{facts['tests']}</dd>" in card
     assert f"<dd>{facts['release']}</dd>" in card
