@@ -33,6 +33,7 @@ from quotez.config import (
     MAX_BARS_DEFAULT,
     build_parser,
 )
+from tests import shared_ci
 from tests.conftest import TOOL_NAMES
 
 REPO = Path(__file__).resolve().parent.parent
@@ -249,6 +250,25 @@ def test_every_action_is_pinned_to_a_released_tag() -> None:
     assert set(uses) == {"actions/checkout@v7", "astral-sh/setup-uv@v10.0.1"}
 
 
+def test_the_shared_workflow_is_pinned_to_a_tag_too() -> None:
+    """A reusable workflow on a moving branch is the same defect as a floating action ref.
+
+    The test above only sees step level `- uses:`. A reusable workflow is called at the JOB
+    level, without the dash, so it slipped through entirely: `@main` there would let a commit in
+    another repository turn this badge red with nothing changed here, which is precisely what
+    pinning exists to prevent.
+    """
+    text = WORKFLOW.read_text(encoding="utf-8")
+    called = re.findall(r"^\s{4}uses: (\S+)$", text, re.MULTILINE)
+    assert called, "no reusable workflow is called, so this repository restates the shared legs"
+    unpinned = [
+        entry
+        for entry in called
+        if not re.fullmatch(r"[\w.-]+/[\w.-]+/\.github/workflows/[\w.-]+@v\d+(\.\d+){0,2}", entry)
+    ]
+    assert unpinned == [], f"a reusable workflow is not pinned to a released tag: {unpinned}"
+
+
 def test_the_readme_states_the_number_of_tests_this_suite_actually_has() -> None:
     """Collected in a subprocess, because the count has to come from pytest, not from a guess.
 
@@ -275,12 +295,14 @@ def test_the_readme_states_the_number_of_tests_this_suite_actually_has() -> None
 def test_every_command_the_readme_tells_a_reader_to_run_is_a_command_ci_runs() -> None:
     # Otherwise the Development block drifts into a list of things that used to be checked,
     # and a contributor who runs all of it can still be surprised by a red badge.
-    workflow = WORKFLOW.read_text(encoding="utf-8")
     commands = [
         line.strip() for line in section("Development").splitlines() if line.startswith("uv")
     ]
     assert len(commands) >= 4
-    missing = [command for command in commands if command not in workflow]
+    # Asked of the pipeline rather than of this file. The common legs moved into the shared
+    # workflow, so a literal search here would now say the README lists commands CI does not run,
+    # which is false. shared_ci.runs answers the real question and explains why it is sound.
+    missing = [command for command in commands if not shared_ci.runs(command)]
     assert missing == []
 
 
