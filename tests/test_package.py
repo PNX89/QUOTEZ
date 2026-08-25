@@ -10,6 +10,7 @@ from pathlib import Path
 from packaging.requirements import Requirement
 
 import quotez
+from tests import shared_ci
 
 REPO = Path(__file__).resolve().parent.parent
 MANIFEST = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
@@ -39,7 +40,9 @@ def test_the_typed_classifier_is_backed_by_a_type_checker_that_actually_runs() -
     settings = MANIFEST["tool"]["mypy"]
     assert settings["strict"] is True
     assert settings["files"] == ["src"]
-    assert "uv run mypy" in WORKFLOW
+    # The type checker runs in the shared workflow, enabled by this repository's call, so the
+    # question is whether CI runs it rather than whether this file spells it out.
+    assert shared_ci.runs("uv run mypy")
 
 
 def test_every_import_the_test_suite_makes_is_a_declared_dependency() -> None:
