@@ -441,7 +441,7 @@ uv run ruff format --check .
 uv run mypy
 ```
 
-255 tests, no network, a few seconds, and identical on macOS, Linux and Windows. That count is
+258 tests, no network, a few seconds, and identical on macOS, Linux and Windows. That count is
 asserted against a real collection run, because a number in a README is a number nobody updates.
 
 ## License
