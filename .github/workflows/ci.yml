@@ -14,42 +14,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: ${{ matrix.os }} python ${{ matrix.python-version }}
-    runs-on: ${{ matrix.os }}
-    # UV_PYTHON pins the interpreter every uv command in the job resolves against. Without
-    # it `uv sync` is free to pick any interpreter satisfying requires-python, and the
-    # matrix would silently test one version four times.
-    env:
-      UV_PYTHON: ${{ matrix.python-version }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            python-version: "3.11"
-          - os: ubuntu-latest
-            python-version: "3.12"
-          - os: ubuntu-latest
-            python-version: "3.13"
-          # macOS is required, not a nicety: the README claims the server runs with no
-          # MetaTrader install anywhere, and a Linux only matrix does not back that claim.
-          - os: macos-latest
-            python-version: "3.13"
-    steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10.0.1
-        with:
-          enable-cache: true
-      - run: uv python install ${{ matrix.python-version }}
-      - run: uv sync --dev
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
-      # On every leg rather than once: the package claims 3.11 upwards, and a union or a
-      # generic that only type checks on the newest interpreter is exactly the kind of thing
-      # a single-version type check leg lets through.
-      - run: uv run mypy
-      - run: uv run pytest
+  # Lint, format, types and the suite, from the shared workflow in PNX89/.github, pinned to a tag
+  # rather than a moving branch so a commit elsewhere cannot turn this badge red.
+  #
+  # mypy runs on every leg rather than once. The package claims 3.11 upwards, and a union or a
+  # generic that only type checks on the newest interpreter is exactly what a single version type
+  # check leg lets through.
+  #
+  # What the pipeline is for, and the five things it deliberately does not gate, is at
+  # https://github.com/PNX89/.github/blob/main/docs/adr/0001-what-ci-is-for.md
+  checks:
+    name: linux
+    uses: PNX89/.github/.github/workflows/checks.yml@v1
+    with:
+      python-versions: '["3.11", "3.12", "3.13"]'
+      run-mypy: true
+      pytest-args: ""
+
+  # macOS is required rather than a nicety, and it is a separate call because it is a separate
+  # claim: the README says the server runs with no MetaTrader install anywhere, and a Linux only
+  # matrix does not back that.
+  checks-macos:
+    name: macos
+    uses: PNX89/.github/.github/workflows/checks.yml@v1
+    with:
+      runs-on: macos-latest
+      python-versions: '["3.13"]'
+      run-mypy: true
+      pytest-args: ""
 
   windows-mt5:
     name: windows python 3.12 with the mt5 extra
