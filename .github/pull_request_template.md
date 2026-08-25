@@ -7,6 +7,10 @@
 ## Checklist
 
 - [ ] Every gate passes locally, not just the tests:
+      `uv sync --dev`
+      `uv run ruff check .`
+      `uv run ruff format --check .`
+      `uv run mypy`
       `uv run pytest`
 - [ ] No number in the README was edited by hand. Anything generated was regenerated.
 - [ ] The prose still describes the code. No claim in the README has quietly stopped being true.
