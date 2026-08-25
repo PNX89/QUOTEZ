@@ -21,6 +21,10 @@ cannot drift away from what CI actually runs. All of them must pass locally befo
 request will go green:
 
 ```bash
+uv sync --dev
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
 uv run pytest
 ```
 
