@@ -16,6 +16,7 @@ instead of trusting a paste.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import anyio
@@ -25,6 +26,16 @@ from quotez.config import ServerConfig
 from quotez.server import build_server
 
 SYMBOL = "SYNTH_FX_ALPHA"
+
+# THE SERVER'S OWN LOGGING IS OFF FOR THIS TRANSCRIPT, and the reason is worth stating rather
+# than hiding. From mcp 2.1 the server logs every tool failure at INFO on stderr, with a
+# wall-clock timestamp in it. This script shows a refusal on purpose, so that log line arrives
+# on purpose too, and its timestamp makes two runs of the same script differ. The README's
+# transcript is asserted byte for byte against a live run and asserted again to be identical
+# across two runs, and a clock in the output defeats both.
+#
+# Silenced HERE, in the example, and nowhere near the server: a deployment wants that log line.
+logging.getLogger("mcp").setLevel(logging.WARNING)
 
 
 def render(payload: Any) -> str:

@@ -41,13 +41,19 @@ from typing import TYPE_CHECKING, Annotated
 
 from mcp import MCPError
 from mcp.server import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import INTERNAL_ERROR, ToolAnnotations
 from pydantic import Field
 
 from quotez import __version__
 from quotez.aggregate import timeframe_seconds
 from quotez.config import MAX_BARS_CEILING, ServerConfig
-from quotez.errors import InvalidRequest, SourceUnavailable, SymbolNotFound
+from quotez.errors import (
+    InvalidRequest,
+    QuotezError,
+    SourceUnavailable,
+    SymbolNotFound,
+)
 from quotez.models import (
     Account,
     BarSeries,
@@ -91,15 +97,35 @@ def make_source(config: ServerConfig) -> MarketDataSource:
 
 @contextmanager
 def _protocol_errors() -> Iterator[None]:
-    """Translate a dead source into a protocol error rather than a tool error.
+    """Sort this server's failures into the two kinds the protocol distinguishes.
 
-    A missing terminal is not something the model can retry its way out of, so it must not
-    come back as a readable tool result that invites another attempt.
+    A DEAD SOURCE IS A PROTOCOL ERROR. A missing terminal is not something the model can retry
+    its way out of, so it must not come back as a readable tool result that invites another
+    attempt.
+
+    EVERYTHING ELSE IS AN ANTICIPATED TOOL ERROR AND IS RAISED AS ONE, which is a correction
+    with a measured cause. These used to escape as ordinary exceptions and the SDK rendered
+    their messages to the caller, so a refused symbol was named and this file's docstrings said
+    so. That is no longer true above mcp 2.0: from 2.1 the server masks any exception it did not
+    expect, and every refusal here came back as the bare string "Error executing tool get_quote"
+    with the symbol gone. Measured on the Dependabot pull request that raised the pin, where six
+    of seven jobs failed on exactly that.
+
+    The SDK is right and the modelling here was wrong. `ToolError` is its channel for a failure
+    the author anticipated and intends the caller to read, and a refusal is the most anticipated
+    thing this server does. Raising it explicitly says so, keeps the wording under this
+    repository's control rather than the SDK's, and works on both 2.0 and 2.1.
+
+    THE WORDING IS STILL IDENTICAL for a symbol the operator hid and one that never existed,
+    which is the property that stops the error being used to enumerate what is hidden. That
+    property lives in `errors.py`, not here, and a test asserts it.
     """
     try:
         yield
     except SourceUnavailable as failure:
         raise MCPError(code=INTERNAL_ERROR, message=str(failure)) from failure
+    except QuotezError as failure:
+        raise ToolError(str(failure)) from failure
 
 
 def build_server(config: ServerConfig) -> MCPServer:
@@ -169,7 +195,8 @@ def build_server(config: ServerConfig) -> MCPServer:
         group filter uses MetaTrader's own syntax, described in the argument. On the replay
         source the instruments are generated and the payload carries synthetic=true.
         """
-        return symbol_universe(group)
+        with _protocol_errors():
+            return symbol_universe(group)
 
     @mcp.tool(title="Get a quote", annotations=READ_ONLY)
     def get_quote(
@@ -212,13 +239,14 @@ def build_server(config: ServerConfig) -> MCPServer:
         the symbol; call list_symbols first if unsure. On the replay source the prices are
         generated, not recorded from any market.
         """
-        if count > config.max_bars:
-            raise InvalidRequest(
-                f"count {count} exceeds this server's limit of {config.max_bars} bars per "
-                "call. Request fewer bars or a coarser timeframe."
-            )
         with _protocol_errors():
-            return source.get_bars(permitted(symbol), timeframe, count)
+            if count > config.max_bars:
+                raise InvalidRequest(
+                    f"count {count} exceeds this server's limit of {config.max_bars} bars per "
+                    "call. Request fewer bars or a coarser timeframe."
+                )
+            with _protocol_errors():
+                return source.get_bars(permitted(symbol), timeframe, count)
 
     @mcp.tool(title="Get bars in a date range", annotations=READ_ONLY)
     def get_bars_range(
@@ -240,25 +268,27 @@ def build_server(config: ServerConfig) -> MCPServer:
         yours; stop `end` at a closed interval if that matters. On the replay source the
         prices are generated, not recorded from any market.
         """
-        for name, moment in (("start", start), ("end", end)):
-            if moment.tzinfo is None:
-                raise InvalidRequest(
-                    f"{name} has no timezone. Pass a UTC time, for example 2026-06-01T08:00:00Z."
-                )
-        if start >= end:
-            raise InvalidRequest(
-                f"start {start.isoformat()} must be earlier than end {end.isoformat()}."
-            )
-        # Counted before fetching. Without this a wide date range walks straight past the
-        # cap that get_bars enforces on `count`.
-        span = math.ceil((end - start).total_seconds() / timeframe_seconds(timeframe))
-        if span > config.max_bars:
-            raise InvalidRequest(
-                f"That range spans up to {span} {timeframe} bars, above this server's limit "
-                f"of {config.max_bars} per call. Narrow the range or use a coarser timeframe."
-            )
         with _protocol_errors():
-            return source.get_bars_range(permitted(symbol), timeframe, start, end)
+            for name, moment in (("start", start), ("end", end)):
+                if moment.tzinfo is None:
+                    raise InvalidRequest(
+                        f"{name} has no timezone. Pass a UTC time, for example "
+                        f"2026-06-01T08:00:00Z."
+                    )
+            if start >= end:
+                raise InvalidRequest(
+                    f"start {start.isoformat()} must be earlier than end {end.isoformat()}."
+                )
+            # Counted before fetching. Without this a wide date range walks straight past the
+            # cap that get_bars enforces on `count`.
+            span = math.ceil((end - start).total_seconds() / timeframe_seconds(timeframe))
+            if span > config.max_bars:
+                raise InvalidRequest(
+                    f"That range spans up to {span} {timeframe} bars, above this server's limit "
+                    f"of {config.max_bars} per call. Narrow the range or use a coarser timeframe."
+                )
+            with _protocol_errors():
+                return source.get_bars_range(permitted(symbol), timeframe, start, end)
 
     @mcp.tool(title="Get contract specification", annotations=READ_ONLY)
     def symbol_info(
