@@ -290,22 +290,29 @@ def repository_text_files() -> list[Path]:
 
     Selected by exclusion rather than by extension, so a file type nobody thought of, such
     as a workflow YAML added later, is covered the day it appears.
+
+    ASKED OF GIT RATHER THAN OF THE FILESYSTEM, which is a correction. It walked the working
+    tree past a hand-maintained skip list, so it saw files that are not in the repository at
+    all: a `.DS_Store` that Finder leaves behind is ignored by git, absent in CI and present on
+    any Mac that has looked in the folder, and it failed this test locally while CI stayed
+    green. A check that passes on the machine that runs it and fails on the machine that reads
+    it is worse than no check.
+
+    The skip list is gone with it. Every entry in it named something .gitignore already
+    excludes, so it was a second copy of the ignore rules, kept by hand, in a test.
     """
-    skipped = {
-        ".git",
-        ".venv",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".ruff_cache",
-        "__pycache__",
-        "uv.lock",
-    }
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"],
+        capture_output=True,
+        check=True,
+        cwd=REPO,
+    )
     return [
         path
-        for path in sorted(REPO.rglob("*"))
-        if path.is_file()
-        and not skipped & set(path.parts)
-        and path.suffix.lower() not in BINARY_SUFFIXES
+        for name in listed.stdout.decode().split("\0")
+        if name
+        for path in [REPO / name]
+        if path.is_file() and path.suffix.lower() not in BINARY_SUFFIXES
     ]
 
 

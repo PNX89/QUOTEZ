@@ -17,6 +17,11 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Investment",
     "Typing :: Typed",
 ]
+# THE RANGE STAYS WIDE, AND I NEARLY NARROWED IT ON A CLAIM I HAD NOT MEASURED. Raising a
+# deliberate `ToolError` produces the same text on 2.0.0 and on 2.1.1, so the committed
+# transcript is byte identical under both and the whole suite passes under both. It was tested
+# rather than assumed, after a first attempt at this commit asserted a difference that the
+# unchanged README was already disproving.
 dependencies = ["mcp>=2.0.0,<3"]
 
 # MetaTrader5 ships win_amd64 wheels only and no source distribution, so without this
