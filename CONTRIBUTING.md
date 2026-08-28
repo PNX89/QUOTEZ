@@ -14,11 +14,10 @@ uv run python examples/agent_session.py
 Under a minute from clone to output, offline, with nothing to configure and no key to supply.
 If that is not true on your machine, that is a bug and worth an issue on its own.
 
-## The checks that gate every push
+## The checks you can run here
 
-These are read out of `.github/workflows/ci.yml` when this file is generated, so the list
-cannot drift away from what CI actually runs. All of them must pass locally before a pull
-request will go green:
+These are read out of `.github/workflows/ci.yml` when this file is generated, so no command
+here is one CI does not run:
 
 ```bash
 uv sync --dev
@@ -30,6 +29,20 @@ uv run pytest
 
 Run every one of them. Running only the test suite is the most common way to be surprised by a
 red badge: formatting and typing are gates here, not suggestions.
+
+## And the jobs that gate the pull request
+
+- linux
+- macos
+- windows python 3.12 with the mt5 extra
+- macos python 3.12, the mt5 extra resolves to nothing
+- ubuntu python 3.14 (advisory)
+
+The list above is longer than the commands above it, and that is the point of naming it. A
+pull request is green when every one of those jobs is, and some of them need something this
+clone does not give you. Passing everything in the previous section is necessary and it is not
+sufficient, which is a sentence this file used to get wrong: it called the command list "the
+checks that gate every push" and left out every job that runs anything other than uv.
 
 ## Everything merges through a pull request
 
