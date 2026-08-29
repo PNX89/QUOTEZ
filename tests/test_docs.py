@@ -237,17 +237,30 @@ def test_the_readme_badge_points_at_a_workflow_that_exists() -> None:
     assert "actions/workflows/ci.yml/badge.svg" in README
 
 
-def test_every_action_is_pinned_to_a_released_tag() -> None:
-    uses = re.findall(r"^\s*- uses: (\S+)$", WORKFLOW.read_text(encoding="utf-8"), re.MULTILINE)
+def test_every_action_is_pinned_to_a_commit() -> None:
+    """A TAG WAS NOT ENOUGH, AND THIS TEST USED TO SAY IT WAS.
+
+    It accepted `@v7` and asserted the exact set of tags in use, which made a floating `@main`
+    impossible and a moving `@v7` invisible. A tag is a pointer its owner can move: the workflow
+    that passed yesterday can run different code today with no commit here, and the version a
+    reader sees still says what it always said.
+
+    So the rule is a commit, with the version in a trailing comment for a human. That is a
+    stricter test than the one it replaces and it is checked the same way: by reading what the
+    workflow actually says rather than by trusting that somebody remembered.
+    """
+    text = WORKFLOW.read_text(encoding="utf-8")
+    uses = re.findall(r"^\s*- uses: (\S+)", text, re.MULTILINE)
     assert uses
-    # A floating ref such as @main would make a green badge unreproducible. An exact
-    # version is accepted as well as a major tag: setup-uv publishes no moving major
-    # tag, so @v10 resolves to nothing and the job fails before it runs a step.
-    unpinned = [
-        entry for entry in uses if not re.fullmatch(r"[\w.-]+/[\w.-]+@v\d+(\.\d+){0,2}", entry)
-    ]
-    assert unpinned == []
-    assert set(uses) == {"actions/checkout@v7", "astral-sh/setup-uv@v10.0.1"}
+    unpinned = [entry for entry in uses if not re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", entry)]
+    assert unpinned == [], f"these actions are pinned to something an owner can move: {unpinned}"
+
+    # And the version has to stay beside it. A forty character hash with no version is a pin
+    # nobody can read, and the first person who needs to upgrade it will look it up on the
+    # internet rather than in the file.
+    for line in text.splitlines():
+        if re.match(r"^\s*- uses: [\w.-]+/[\w.-]+@[0-9a-f]{40}", line):
+            assert "#" in line, f"pinned with no version named beside it: {line.strip()}"
 
 
 def test_the_shared_workflow_is_pinned_to_a_tag_too() -> None:
