@@ -21,7 +21,7 @@ import pytest
 
 import quotez
 from quotez.errors import SourceUnavailable, SymbolNotFound
-from quotez.mt5source import Mt5Source
+from quotez.mt5source import ORDER_TYPE_NAMES, Mt5Source
 from quotez.protocol import MarketDataSource
 
 # 2026-06-01T08:00:00Z. Chosen because it is not midnight in any common local zone, so a
@@ -64,6 +64,35 @@ RATE_ROW = {
 # identifiable in an assertion.
 FORMING_ROW = {**RATE_ROW, "time": EPOCH_SECONDS + 3600, "tick_volume": 3, "close": 1.1001}
 
+# One open SHORT and one pending SELL LIMIT. Both carry MetaTrader's non-zero codes on purpose:
+# type 0 is a buy for both families, so a mapping that reported everything long, or everything
+# as the first name in its table, would look perfectly right against a default row. The fake
+# used to hand back empty tuples for both, which left every line of both mappings unexecuted.
+POSITION_ROW = SimpleNamespace(
+    ticket=778899,
+    symbol="EURUSD",
+    type=1,
+    volume=0.5,
+    price_open=1.09500,
+    price_current=1.10150,
+    sl=1.11000,
+    tp=1.08000,
+    profit=-32.5,
+    time=EPOCH_SECONDS,
+)
+
+ORDER_ROW = SimpleNamespace(
+    ticket=112233,
+    symbol="EURUSD",
+    type=3,
+    volume_initial=1.0,
+    volume_current=0.75,
+    price_open=1.12000,
+    sl=1.12500,
+    tp=1.10000,
+    time_setup=EPOCH_SECONDS + 60,
+)
+
 
 class FakeTerminal(ModuleType):
     """Just enough MetaTrader5 to exercise the mapping, with the same return conventions.
@@ -72,10 +101,19 @@ class FakeTerminal(ModuleType):
     `symbol_info` returns None for an unknown symbol rather than raising.
     """
 
-    def __init__(self, *, initialized: bool = True, known: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        initialized: bool = True,
+        known: bool = True,
+        positions: tuple[Any, ...] | None = (POSITION_ROW,),
+        orders: tuple[Any, ...] | None = (ORDER_ROW,),
+    ) -> None:
         super().__init__("MetaTrader5")
         self._initialized = initialized
         self._known = known
+        self._positions = positions
+        self._orders = orders
         self.shutdown_calls = 0
         self.TIMEFRAME_M1 = 1
         self.TIMEFRAME_M5 = 5
@@ -130,10 +168,10 @@ class FakeTerminal(ModuleType):
         )
 
     def positions_get(self) -> Any:
-        return ()
+        return self._positions
 
     def orders_get(self) -> Any:
-        return ()
+        return self._orders
 
 
 @pytest.fixture
@@ -332,3 +370,116 @@ def test_an_unknown_timeframe_never_reaches_the_terminal(connected_source: Mt5So
 
     with pytest.raises(InvalidRequest, match="W1"):
         connected_source.get_bars("EURUSD", "W1", 1)  # type: ignore[arg-type]
+
+
+# --------------------------------------------------------------------------------------
+# Positions and orders
+#
+# Two of the eight tools, and until the fake started returning rows every line of both
+# mappings was dead: the direction lookup, the order type name, the unknown-type fallback and
+# the UTC timestamp for each. Remapping POSITION_TYPE_NAMES so that both codes meant "buy" and
+# emptying ORDER_TYPE_NAMES altogether left the whole suite green, which is a short position
+# reported to a model as a long.
+
+
+def test_a_short_position_is_reported_short_and_in_utc(connected_source: Mt5Source) -> None:
+    listed = connected_source.list_positions()
+    assert listed.count == 1
+    held = listed.positions[0]
+    # Type 1 is MetaTrader's code for a short. Nothing else in this file distinguishes the two.
+    assert held.type == "sell"
+    assert held.ticket == 778899
+    assert held.symbol == "EURUSD"
+    assert (held.volume, held.price_open, held.price_current) == (0.5, 1.09500, 1.10150)
+    assert (held.sl, held.tp, held.profit) == (1.11000, 1.08000, -32.5)
+    # The same rule the bars get, and for the same reason: a naive datetime would be read
+    # against the local zone and the position would be timestamped hours out.
+    assert held.time == datetime(2026, 6, 1, 8, 0, tzinfo=UTC)
+    assert held.time.tzinfo is UTC
+    assert (listed.source, listed.synthetic) == ("mt5", False)
+
+
+def test_a_pending_order_keeps_its_type_name_and_both_volumes(
+    connected_source: Mt5Source,
+) -> None:
+    listed = connected_source.list_orders()
+    assert listed.count == 1
+    pending = listed.orders[0]
+    # Type 3 is sell_limit. A table read off by index, or one that lost an entry, lands on a
+    # different word here and the model is told the wrong side of the book.
+    assert pending.type == "sell_limit"
+    assert pending.ticket == 112233
+    assert pending.symbol == "EURUSD"
+    # Initial and current are separate fields: a partially filled order differs in the second.
+    assert (pending.volume_initial, pending.volume_current) == (1.0, 0.75)
+    assert (pending.price_open, pending.sl, pending.tp) == (1.12000, 1.12500, 1.10000)
+    assert pending.time_setup == datetime(2026, 6, 1, 8, 1, tzinfo=UTC)
+    assert pending.time_setup.tzinfo is UTC
+    assert (listed.source, listed.synthetic) == ("mt5", False)
+
+
+def test_every_order_type_code_maps_to_the_name_metatrader_gives_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Pinned by code AND by size. Reading the table out of the module would cover one code
+    # fewer each time an entry was deleted and stay green while doing it.
+    expected = {
+        0: "buy",
+        1: "sell",
+        2: "buy_limit",
+        3: "sell_limit",
+        4: "buy_stop",
+        5: "sell_stop",
+        6: "buy_stop_limit",
+        7: "sell_stop_limit",
+        8: "close_by",
+    }
+    assert len(ORDER_TYPE_NAMES) == len(expected) == 9
+    rows = tuple(
+        SimpleNamespace(**{**vars(ORDER_ROW), "ticket": 900 + code, "type": code})
+        for code in expected
+    )
+    monkeypatch.setitem(sys.modules, "MetaTrader5", FakeTerminal(orders=rows))
+    source = Mt5Source()
+    source.connect()
+    assert {order.ticket - 900: order.type for order in source.list_orders().orders} == expected
+
+
+def test_an_order_type_the_terminal_invents_is_reported_rather_than_guessed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A code outside the table is surfaced with its number attached, so a broker or a terminal
+    # build that adds one shows up as an unknown rather than as whichever name happened to be
+    # first. Reporting it beats guessing; guessing is how a stop becomes a limit.
+    unknown = SimpleNamespace(**{**vars(ORDER_ROW), "type": 42})
+    monkeypatch.setitem(sys.modules, "MetaTrader5", FakeTerminal(orders=(unknown,)))
+    source = Mt5Source()
+    source.connect()
+    assert source.list_orders().orders[0].type == "unknown_42"
+
+
+def test_a_position_that_is_neither_long_nor_short_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A position has exactly two directions, so an unrecognised code is not a value to pass
+    # through under a plausible name. It becomes a protocol error the model cannot retry into.
+    impossible = SimpleNamespace(**{**vars(POSITION_ROW), "type": 7})
+    monkeypatch.setitem(sys.modules, "MetaTrader5", FakeTerminal(positions=(impossible,)))
+    source = Mt5Source()
+    source.connect()
+    with pytest.raises(SourceUnavailable, match="position type 7"):
+        source.list_positions()
+
+
+@pytest.mark.parametrize("empty", ["positions", "orders"])
+def test_a_none_result_is_a_source_failure_and_not_an_empty_list(
+    monkeypatch: pytest.MonkeyPatch, empty: str
+) -> None:
+    # Both getters return None on failure rather than raising, the same convention symbol_info
+    # follows. Letting that fall through as an empty list would tell a model the account holds
+    # nothing open, which is the most dangerous wrong answer either of these two tools can give.
+    monkeypatch.setitem(sys.modules, "MetaTrader5", FakeTerminal(**{empty: None}))
+    source = Mt5Source()
+    source.connect()
+    with pytest.raises(SourceUnavailable, match="IPC timeout"):
+        getattr(source, f"list_{empty}")()

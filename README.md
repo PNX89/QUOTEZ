@@ -297,11 +297,19 @@ Two tests hold that in place, and the second one is the one that means something
 the package for those three MetaTrader calls: cheap, covers every file, and satisfied by a name
 assembled at run time. The second walks the AST of `mt5source.py` and asserts the positive
 property instead, that the set of attributes this package reads off the terminal module is exactly
-the read calls its own docstring names plus the seven timeframe constants, with nothing reached
-through `getattr` and nothing rebound to a second variable. `_mt5()` returns the whole MetaTrader5
-module, so the absence of three names out of several hundred attributes proves very little on its
-own. Five deliberately broken snippets are checked against that walk so the walk itself is known
-to fail when it should.
+the eleven read calls the test file permits plus the seven timeframe constants, with nothing
+reached through `getattr` and nothing rebound to a second variable. `_mt5()` returns the whole
+MetaTrader5 module, so the absence of three names out of several hundred attributes proves very
+little on its own.
+
+The permitted list lives in `tests/test_server.py`, not in the module being audited, and the
+module's own docstring is asserted against it. Two files in two roles, which is the smaller and
+truer claim: while the docstring alone was the specification, a new terminal call could arrive
+carrying its own permission in the same edit, and an audit walked one straight through. The walk
+follows what is bound to what rather than watching a fixed pair of names, so an annotated
+assignment, a walrus, a tuple unpack and a `for` target reach the module as surely as a plain
+one does. Eleven deliberately broken snippets are checked against the walk so the walk itself is
+known to fail when it should, and six of those are forms it used to go straight past.
 
 Every tool is declared `ToolAnnotations(read_only_hint=True, open_world_hint=False)`. That
 declaration is a courtesy to clients and nothing more: the MCP specification tells clients to
@@ -441,7 +449,7 @@ uv run ruff format --check .
 uv run mypy
 ```
 
-260 tests, no network, a few seconds, and identical on macOS, Linux and Windows. That count is
+285 tests, no network, a few seconds, and identical on macOS, Linux and Windows. That count is
 asserted against a real collection run, because a number in a README is a number nobody updates.
 
 ## License
