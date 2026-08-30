@@ -365,7 +365,20 @@ def test_the_committed_demo_output_still_matches_a_live_run() -> None:
 def test_the_published_card_carries_the_output_it_claims_to() -> None:
     card = (REPO / "site" / "index.html").read_text(encoding="utf-8")
     demo = (REPO / "docs" / "evidence" / "demo.txt").read_text(encoding="utf-8")
-    assert _escaped(demo.rstrip()) in card, "the card's terminal block is not the captured output"
+    # EVERY LINE, IN ORDER, RATHER THAN ONE CONTIGUOUS BLOCK. The card folds output longer than
+    # forty lines into a <details>, so the transcript arrives in two <pre> elements and a
+    # substring test fails on a page that is completely correct. Folding rather than truncating
+    # is the point: every byte of the artefact is still on the page, which is what the note under
+    # it claims, and the reader gets the argument on the first screen. Asserted in ORDER, so a
+    # card carrying the right lines shuffled would still fail.
+    position = 0
+    for line in demo.rstrip().split("\n"):
+        found = card.find(_escaped(line), position)
+        assert found >= 0, (
+            f"the card is missing a line of the captured output, or has it out of order: "
+            f"{line[:70]!r}"
+        )
+        position = found
     # The claim the note on the card makes about itself has to be true, and this is the test
     # it points at. If this assertion is ever deleted, that sentence becomes false.
     assert "a test fails when it" in card
@@ -425,3 +438,58 @@ def test_the_readme_frame_is_built_from_the_captured_output() -> None:
     # silently from a code change rather than from anyone typing one.
     assert svg.isascii()
     assert "<script" not in svg, "a README image is served through a proxy that strips script"
+
+
+def test_the_card_claims_only_the_python_versions_ci_will_fail_over() -> None:
+    """The card said 3.11 to 3.14. CI's blocking matrix stops at 3.13.
+
+    THE FUNCTION'S DOCSTRING PROMISED THE PROPERTY IT DID NOT HAVE. `python_range()` said it
+    reads the CI matrix "so the card cannot claim support CI does not test", and it regexed every
+    quoted `3.x` in the whole workflow file. That swept up `UV_PYTHON: "3.14"` from a job marked
+    `continue-on-error: true`.
+
+    An advisory leg is a good thing to run and a dishonest thing to advertise. The published card
+    claimed a version the build will not fail over, while the README badge in the same repository
+    said 3.11 to 3.13, so the two pages contradicted each other about the same fact and the wrong
+    one was the page whose own footer promises it cannot drift from the code.
+
+    NOTHING ASSERTED THIS FIELD ANYWHERE. The card test checked `tests` and `release` into the
+    page and skipped `python`. Three-way here: the gating matrix, the facts file, and the badge a
+    reader sees first.
+    """
+    import yaml
+
+    workflow = yaml.safe_load((REPO / ".github" / "workflows" / "ci.yml").read_text("utf-8"))
+    gating: set[str] = set()
+    advisory: set[str] = set()
+    for job in (workflow.get("jobs") or {}).values():
+        declared = (job.get("with") or {}).get("python-versions")
+        env_pin = (job.get("env") or {}).get("UV_PYTHON")
+        found = set()
+        if declared is not None:
+            found |= {
+                str(v) for v in (json.loads(declared) if isinstance(declared, str) else declared)
+            }
+        if env_pin:
+            found.add(str(env_pin))
+        (advisory if job.get("continue-on-error") else gating).update(found)
+
+    assert gating, "no job gates on a Python version, so the card's range verifies nothing"
+    order = lambda v: tuple(int(part) for part in v.split("."))  # noqa: E731
+    lowest, highest = min(gating, key=order), max(gating, key=order)
+
+    facts = json.loads((REPO / "docs" / "evidence" / "facts.json").read_text("utf-8"))
+    assert facts["python"] == f"{lowest} to {highest}", (
+        f"the card states Python {facts['python']} and CI gates on {lowest} to {highest}"
+    )
+
+    # The badge a reader meets before the card, so the two pages cannot disagree.
+    readme = (REPO / "README.md").read_text("utf-8")
+    for version in sorted(gating, key=order):
+        assert version in readme, f"CI gates on {version} and the README never mentions it"
+
+    # An advisory version must NOT be inside the claimed range, which is the exact defect.
+    for version in advisory - gating:
+        assert not (order(lowest) <= order(version) <= order(highest)), (
+            f"{version} runs only in a job allowed to fail and the card claims it as supported"
+        )
