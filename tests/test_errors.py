@@ -176,6 +176,26 @@ async def test_an_inverted_range_is_rejected(client: Client) -> None:
     assert result.is_error is True
     assert "must be earlier than end" in result.content[0].text
 
+    # Reversed bounds only exercise the `>` half of the guard's `>=`. The tool promises a
+    # half-open interval, [start, end), and equal bounds have to be rejected the same way,
+    # not answered with a successful empty BarSeries: `is_error=False` on an empty result is
+    # exactly the "reads as a fact" shape this suite otherwise polices.
+    equal_result = await client.call_tool(
+        "get_bars_range",
+        {
+            "symbol": SYMBOL,
+            "timeframe": "H1",
+            "start": WINDOW["start"],
+            "end": WINDOW["start"],
+        },
+    )
+    assert equal_result.is_error is True
+    equal_text = equal_result.content[0].text
+    assert "must be earlier than end" in equal_text
+    # Named twice, once as each bound, since a reader has to be able to tell this is the
+    # equal-bounds case rather than the fully reversed one from the message alone.
+    assert equal_text.count("2026-06-01T08:00:00+00:00") == 2
+
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("tool", sorted(BAD_CALLS))
