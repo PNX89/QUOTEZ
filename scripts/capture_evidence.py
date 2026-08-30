@@ -50,12 +50,49 @@ def test_total() -> int:
 
 
 def python_range() -> str:
-    """Read from the CI matrix, so the card cannot claim support CI does not test."""
-    workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    versions = sorted({v for v in re.findall(r'"(3\.\d+)"', workflow)}, key=lambda v: int(v[2:]))
+    """The versions CI will FAIL the build over, read as structure rather than as text.
+
+    THE DOCSTRING USED TO STATE THE PROPERTY THIS FUNCTION DID NOT HAVE. It said it reads the CI
+    matrix so the card cannot claim support CI does not test, and it regexed every quoted `3.x`
+    in the whole file. That caught `UV_PYTHON: "3.14"` from a job carrying
+    `continue-on-error: true`, so the published card advertised Python 3.14 support while the
+    blocking matrix stopped at 3.13 and the README badge said so. The page and the badge
+    contradicted each other about the same repository, and the page was the one whose own footer
+    promises it cannot drift from the code.
+
+    Two rules now, and the second is the one that matters:
+
+      1. Read the YAML, do not pattern-match the file. This repository already learned that in
+         `pagesgen/src/map.ts`: a dependency list has to be read as structure and never as text
+         that looks like structure. The lesson was written there and not carried here.
+      2. A job that is allowed to fail is not a claim of support. An advisory leg is a useful
+         thing to run and a dishonest thing to advertise, so `continue-on-error` jobs are skipped
+         and the advisory version is mentioned in the README's own words instead.
+
+    Sorted on a tuple of integers, never on `float`. `float("3.9") > float("3.13")`, so a 3.9 leg
+    would have published a range running backwards.
+    """
+    import yaml
+
+    workflow = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    versions: set[str] = set()
+    for job in (workflow.get("jobs") or {}).values():
+        if job.get("continue-on-error"):
+            continue
+        declared = (job.get("with") or {}).get("python-versions")
+        if declared is None:
+            continue
+        parsed = json.loads(declared) if isinstance(declared, str) else declared
+        versions.update(str(v) for v in parsed)
     if not versions:
-        raise SystemExit("no Python versions found in the CI matrix")
-    return f"{versions[0]} to {versions[-1]}"
+        raise SystemExit(
+            "no gating job declares python-versions, so this card would state a range nothing "
+            "verifies"
+        )
+    ordered = sorted(versions, key=lambda v: tuple(int(part) for part in v.split(".")))
+    return f"{ordered[0]} to {ordered[-1]}"
 
 
 def release() -> str:
