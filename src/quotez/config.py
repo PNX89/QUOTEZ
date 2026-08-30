@@ -85,7 +85,11 @@ class ServerConfig:
         """Build from `QUOTEZ_*` variables, falling back to the defaults."""
         env = os.environ if environ is None else environ
         return cls(
-            source=env.get(ENV_SOURCE, "replay"),  # type: ignore[arg-type]
+            # Lowercased for the same reason log_level is uppercased three lines below: the
+            # console script's --source already normalises case through argparse's
+            # type=str.lower, and QUOTEZ_SOURCE is meant to configure both entry points the
+            # same way. Left raw, a value that works as a flag would crash as an env var.
+            source=env.get(ENV_SOURCE, "replay").lower(),  # type: ignore[arg-type]
             symbols=parse_symbols(env.get(ENV_SYMBOLS)),
             max_bars=_parse_max_bars(env.get(ENV_MAX_BARS)),
             log_level=env.get(ENV_LOG_LEVEL, "INFO").upper(),
@@ -142,7 +146,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-bars",
         type=int,
-        default=os.environ.get(ENV_MAX_BARS, str(MAX_BARS_DEFAULT)),
+        # Stripped before the fallback applies, unlike --symbols and --source above: argparse
+        # runs `type=int` on a string default too, and int("") raises. _parse_max_bars treats
+        # a blank QUOTEZ_MAX_BARS as "use the default", so this entry point has to reach the
+        # same default rather than fail on a value from_env accepts.
+        default=os.environ.get(ENV_MAX_BARS, "").strip() or str(MAX_BARS_DEFAULT),
         metavar="N",
         help=f"Most bars one call may return, 1 to {MAX_BARS_CEILING} "
         f"(default {MAX_BARS_DEFAULT}).",

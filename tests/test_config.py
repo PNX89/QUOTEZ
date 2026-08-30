@@ -91,16 +91,31 @@ def test_the_environment_configures_the_module_global_path(
     monkeypatch.setenv("QUOTEZ_MAX_BARS", "250")
     monkeypatch.setenv("QUOTEZ_SYMBOLS", "synth_fx_alpha,SYNTH_FX_BETA")
     monkeypatch.setenv("QUOTEZ_LOG_LEVEL", "warning")
+    # Mixed case, the same way a human would type it into a host's env block. --source
+    # normalises case through argparse; QUOTEZ_SOURCE has to agree, or the same value works
+    # on the console script and crashes `mcp run`.
+    monkeypatch.setenv("QUOTEZ_SOURCE", "Replay")
     config = ServerConfig.from_env()
     assert config.max_bars == 250
     assert config.symbols == ("SYNTH_FX_ALPHA", "SYNTH_FX_BETA")
     assert config.log_level == "WARNING"
+    assert config.source == "replay"
 
 
 def test_a_bad_environment_value_fails_at_startup(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("QUOTEZ_MAX_BARS", "many")
     with pytest.raises(InvalidRequest, match="whole number"):
         ServerConfig.from_env()
+
+    # A blank value is different from a bad one, and realistic: a host's env block (a Claude
+    # Desktop or VS Code mcp.json entry) left empty rather than omitted. Whitespace only
+    # counts as blank too. Both entry points have to agree that blank means "use the
+    # default": argparse runs `type=int` on a string default, and int("") raises, so
+    # `from_args` needs the same blank handling `from_env` already has.
+    for blank in ("", "   "):
+        monkeypatch.setenv("QUOTEZ_MAX_BARS", blank)
+        assert ServerConfig.from_env().max_bars == MAX_BARS_DEFAULT
+        assert ServerConfig.from_args([]).max_bars == MAX_BARS_DEFAULT
 
 
 def test_flags_override_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
