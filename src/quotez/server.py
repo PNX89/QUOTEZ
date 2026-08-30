@@ -245,8 +245,7 @@ def build_server(config: ServerConfig) -> MCPServer:
                     f"count {count} exceeds this server's limit of {config.max_bars} bars per "
                     "call. Request fewer bars or a coarser timeframe."
                 )
-            with _protocol_errors():
-                return source.get_bars(permitted(symbol), timeframe, count)
+            return source.get_bars(permitted(symbol), timeframe, count)
 
     @mcp.tool(title="Get bars in a date range", annotations=READ_ONLY)
     def get_bars_range(
@@ -287,8 +286,7 @@ def build_server(config: ServerConfig) -> MCPServer:
                     f"That range spans up to {span} {timeframe} bars, above this server's limit "
                     f"of {config.max_bars} per call. Narrow the range or use a coarser timeframe."
                 )
-            with _protocol_errors():
-                return source.get_bars_range(permitted(symbol), timeframe, start, end)
+            return source.get_bars_range(permitted(symbol), timeframe, start, end)
 
     @mcp.tool(title="Get contract specification", annotations=READ_ONLY)
     def symbol_info(
