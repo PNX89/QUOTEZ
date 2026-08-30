@@ -1,5 +1,5 @@
 {
-  "tests": 260,
+  "tests": 285,
   "python": "3.11 to 3.13",
   "release": "v0.1.0",
   "captured": "2026-08-30",
