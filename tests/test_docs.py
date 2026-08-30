@@ -403,17 +403,31 @@ def test_the_card_states_numbers_that_are_true_today() -> None:
     # ties the release the card advertises to the version the wheel would carry.
     assert facts["release"] == f"v{__version__}"
     card = (REPO / "site" / "index.html").read_text(encoding="utf-8")
-    assert f"<dd>{facts['tests']}</dd>" in card
-    assert f"<dd>{facts['release']}</dd>" in card
+    # EVERY CELL IN THE STRIP, read back with its label, rather than two of the three checked
+    # in by value. The cell nobody asserted was the cell that went wrong: the card advertised a
+    # Python version CI is allowed to fail over, while the README badge in the same repository
+    # said otherwise. A cell added here later fails this instead of arriving unwatched.
+    strip = re.findall(r"<dt>\s*([^<]+?)\s*</dt>\s*<dd>\s*([^<]+?)\s*</dd>", card)
+    assert strip == [
+        ("Tests", str(facts["tests"])),
+        ("Python", facts["python"]),
+        ("Release", facts["release"]),
+    ], f"the card's fact strip is {strip}, which is not what facts.json says"
 
 
 def test_the_readme_frame_is_built_from_the_captured_output() -> None:
     """The animated frame in the first screenful has to be the real run, not a picture of one.
 
     Every text line the SVG draws, minus the prompt line it adds and the truncation note it
-    ends with, must appear in the captured output in the same order. Written this way rather
-    than by re-deriving the generator's truncation arithmetic, because a test that reimplements
-    the thing it checks passes for the wrong reason.
+    ends with, must be the line the captured output printed in that position. The arithmetic
+    comes from the frame's own closing note rather than from the generator, because a test that
+    reimplements the thing it checks passes for the wrong reason.
+
+    IT USED TO ASSERT NOTHING AT ALL ON A FRAME THAT DREW NOTHING. The body was collected and
+    looped over with no floor under it, so blanking every <text> in the SVG except the prompt
+    and the note left a frame carrying no output whatsoever, and the loop ran zero times and
+    passed. The README offers this frame in its first screenful as the reason the picture is not
+    a picture.
     """
     svg = (REPO / "docs" / "demo.svg").read_text(encoding="utf-8")
     demo = (REPO / "docs" / "evidence" / "demo.txt").read_text(encoding="utf-8")
@@ -421,17 +435,47 @@ def test_the_readme_frame_is_built_from_the_captured_output() -> None:
     drawn = [html.unescape(m) for m in re.findall(r"<text[^>]*>(.*?)</text>", svg, re.DOTALL)]
     assert drawn, "the frame draws no text at all"
     assert drawn[0].startswith("$ "), "the frame does not open on the command it ran"
-    assert drawn[-1].startswith("... ") and "more lines" in drawn[-1]
+    # drawn[-2] is the blank line the frame puts between the output and the note, which is why
+    # the slice below stops two short. Asserted rather than assumed: it used to be excluded with
+    # no reason given, so a frame that started drawing real output there would lose a line from
+    # the comparison silently.
+    assert drawn[-2] == "", "the frame no longer ends on a spacer, so this slice is wrong"
 
     body = [line for line in drawn[1:-2] if line.strip()]
     haystack = demo.splitlines()
-    position = 0
-    for line in body:
-        stem = line[:-3] if line.endswith("...") else line
-        while position < len(haystack) and not haystack[position].startswith(stem):
-            position += 1
-        assert position < len(haystack), f"the frame draws a line the run never printed: {line!r}"
-        position += 1
+
+    # HOW MANY LINES THE FRAME OWES, taken from its own closing note rather than from the
+    # generator's arithmetic. Without this the loop below runs zero times on a frame that drew
+    # nothing, and blanking every <text> in the SVG but the first and the last passed. That is
+    # the picture the README's first screenful offers as proof it is not a picture.
+    note = re.fullmatch(r"\.\.\. (\d+) more lines, in full on the card", drawn[-1])
+    assert note is not None, f"the frame's closing note has changed shape: {drawn[-1]!r}"
+    shown = len(haystack) - int(note.group(1))
+    assert shown > 0, "the note claims the frame left out everything it was given"
+    printed = [line for line in haystack[:shown] if line.strip()]
+    assert len(body) == len(printed), (
+        "the frame draws a different number of lines from the one its own note accounts for"
+    )
+
+    # PAIRED OFF, line against the line it is supposed to be, rather than each frame line
+    # searched for anywhere in the run. Scanning forwards was the weaker half of the same
+    # mistake the count above fixes: a long enough document contains almost any prefix
+    # somewhere. The count makes the pairing possible and the pairing is what makes it mean
+    # something.
+    #
+    # The frame clips a line that will not fit and ends it in an ellipsis, which is legitimate
+    # and has to stay passing, so the rule is: a drawn line is either the printed line, or it is
+    # a clipped one that says so. Demanding it back verbatim would fail on a correct frame;
+    # accepting any prefix would accept a frame that drew one character of it.
+    for drawn_line, printed_line in zip(body, printed, strict=True):
+        if drawn_line.endswith("..."):
+            assert printed_line.startswith(drawn_line[:-3]), (
+                f"the frame clips a line the run never printed: {drawn_line!r}"
+            )
+        else:
+            assert drawn_line == printed_line, (
+                f"the frame draws {drawn_line!r} where the run printed {printed_line!r}"
+            )
 
     # ASCII only: test_every_text_file_in_the_repository_is_pure_ascii covers the tree, and this
     # says why it matters here. The frame is generated, so a non ASCII glyph would arrive
