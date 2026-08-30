@@ -86,9 +86,16 @@ def test_bucket_start_labels_the_left_edge_in_utc() -> None:
     assert edge.tzinfo is UTC
 
 
-def test_bucket_start_rejects_a_naive_timestamp() -> None:
+def test_bucket_start_rejects_a_naive_timestamp_or_a_non_positive_width() -> None:
     with pytest.raises(InvalidRequest, match="no timezone"):
         bucket_start(datetime(2026, 6, 1, 8, 0), 3600)
+
+    # bucket_start is in aggregate.__all__, so it is public on its own, not merely an
+    # internal helper reached through aggregate_seconds, which rejects a non-positive
+    # period before this guard would ever run. Called directly, the guard is what stands
+    # between a caller and a division producing a bucket edge nobody asked for.
+    with pytest.raises(InvalidRequest, match="must be positive"):
+        bucket_start(utc("2026-06-01T08:00:00Z"), 0)
 
 
 # --------------------------------------------------------------------------------------
