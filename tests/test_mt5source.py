@@ -333,6 +333,7 @@ def test_the_spread_is_computed_from_the_tick(connected_source: Mt5Source) -> No
 
 def test_the_account_login_is_masked_and_identity_is_dropped(
     connected_source: Mt5Source,
+    terminal: FakeTerminal,
 ) -> None:
     account = connected_source.get_account()
     assert account.login_masked == "****7890"
@@ -343,6 +344,28 @@ def test_the_account_login_is_masked_and_identity_is_dropped(
         assert identifying not in payload
     assert account.synthetic is False
     assert account.equity == 5120.5
+
+    # A login of four digits or fewer has no leading digits for a plain [-4:] slice to
+    # discard, so it returns the login unchanged: real MT5 logins run to six digits or
+    # more, but the field's own description promises a fixed mask, not "whatever a slice
+    # happens to leave". The fixed width also stops the output length from giving away
+    # how many digits the real login has.
+    terminal.account_info = lambda: SimpleNamespace(  # type: ignore[method-assign]
+        login=123,
+        currency="EUR",
+        balance=0.0,
+        equity=0.0,
+        margin=0.0,
+        margin_free=0.0,
+        margin_level=0.0,
+        leverage=1,
+        name="",
+        server="",
+        company="",
+    )
+    short = connected_source.get_account()
+    assert short.login_masked == "****0123"
+    assert len(short.login_masked) == len(account.login_masked)
 
 
 def test_symbol_info_maps_every_declared_field(connected_source: Mt5Source) -> None:

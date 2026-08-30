@@ -268,8 +268,13 @@ class Mt5Source:
             raise self._failure(mt5, "account_info returned no result")
         # name, server and company are read but never returned: they identify the broker
         # and the account holder and no market data question needs either.
+        #
+        # Left padded to four digits before slicing, so the mask is always eight characters.
+        # A plain [-4:] on a login of four digits or fewer returns the whole thing unchanged,
+        # which both contradicts this field's own description ("masked to its last four
+        # digits") and lets the output length give away the login's real digit count.
         return Account(
-            login_masked="****" + str(info.login)[-4:],
+            login_masked="****" + str(info.login).rjust(4, "0")[-4:],
             currency=info.currency,
             balance=info.balance,
             equity=info.equity,
