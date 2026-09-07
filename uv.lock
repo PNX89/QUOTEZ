@@ -302,8 +302,8 @@ name = "httpcore2"
 version = "2.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "h11", marker = "python_full_version < '3.12' or python_full_version >= '3.14' or sys_platform != 'emscripten'" },
-    { name = "truststore", marker = "python_full_version < '3.12' or python_full_version >= '3.14' or sys_platform != 'emscripten'" },
+    { name = "h11" },
+    { name = "truststore" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a9/83/a896fc59940fc5a6e2aff3a4be1d92fa890112936803b331cae75a993c34/httpcore2-2.10.0.tar.gz", hash = "sha256:13c0cc3d1919d4f28457f60cd2c2abe04113a8af184ccf1142811beba936f9dc", size = 67427, upload-time = "2026-08-09T09:11:32.123Z" }
 wheels = [
@@ -564,17 +564,17 @@ wheels = [
 
 [[package]]
 name = "metatrader5"
-version = "5.0.6090"
+version = "5.0.6162"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform != 'emscripten') or (python_full_version >= '3.14' and sys_platform == 'emscripten')" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e7/44/df7029799438a8e543e6ebf6ff5cf5e9f7685e6d4edf60483b2d859f0dc8/metatrader5-5.0.6090-cp311-cp311-win_amd64.whl", hash = "sha256:0c43c206ad6cfb47542fb532b1c0d75a873f410506581a0df9c30c2b73c3baab", size = 47990, upload-time = "2026-08-01T12:31:17.645Z" },
-    { url = "https://files.pythonhosted.org/packages/74/be/628204c9990d55aa075a6d0182b59fa0feddc0a842d628fb943b69df102e/metatrader5-5.0.6090-cp312-cp312-win_amd64.whl", hash = "sha256:70601ae582a0d9a5b8e4d074b6f198ccf82a3172ced4c8eb4b47ad091f578a86", size = 47928, upload-time = "2026-08-01T12:31:19.146Z" },
-    { url = "https://files.pythonhosted.org/packages/e8/0f/b9959c2b74fc5f8d0b410ee872204ec12153540e1cb90aac92d4906cd0f9/metatrader5-5.0.6090-cp313-cp313-win_amd64.whl", hash = "sha256:66b5dfab5ca1411856595500232111f330e67b3293791bfddfb4c202b0f87db1", size = 47929, upload-time = "2026-08-01T12:31:20.34Z" },
-    { url = "https://files.pythonhosted.org/packages/3b/f7/fe005151ebdb9cc5fc01d10abb5d0222e6853f69e71c3004c06f8d7c1c95/metatrader5-5.0.6090-cp314-cp314-win_amd64.whl", hash = "sha256:b79f9729fb7a48e73de911ae14bf6b6310c1ae2c68020fac1887f632d11c0621", size = 49490, upload-time = "2026-08-01T12:31:21.579Z" },
+    { url = "https://files.pythonhosted.org/packages/65/49/3a33fc0f1e15172dc54e7842cd2da408b9699b77540e24f39e7dee51b595/metatrader5-5.0.6162-cp311-cp311-win_amd64.whl", hash = "sha256:beaf32e3a916d8ad17d5bf09aa8dca097b68faccae191036b2f78d866b8bf47a", size = 48025, upload-time = "2026-09-03T20:09:46.954Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/38/6e8ccb2abc5b62a7d696f7c7d98cddd8ca36867961ae7a16dbb9645b87d2/metatrader5-5.0.6162-cp312-cp312-win_amd64.whl", hash = "sha256:9162dbb7b9bf4f0e1b439c1bbe22b5676496774805f9f54c7cf2768ed7f5e79b", size = 47969, upload-time = "2026-09-03T20:09:47.99Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/c2/8faf0a6d9f19163266b8427dd355d57950245e1c0a8267613f754323d5e1/metatrader5-5.0.6162-cp313-cp313-win_amd64.whl", hash = "sha256:bccc3a74777371d1d41e54042429fcbae3d9f163753e2597484b395af75f2df0", size = 47972, upload-time = "2026-09-03T20:09:48.891Z" },
+    { url = "https://files.pythonhosted.org/packages/91/8c/c4394ad2d8196f8d217d077a5536e03e497afd7631cd8ae33274e03e28e4/metatrader5-5.0.6162-cp314-cp314-win_amd64.whl", hash = "sha256:eae704c29baf9e3ed8ab6d7b687b3d45635c9bcc9a3ceb95c4c28c4f10639ad8", size = 49530, upload-time = "2026-09-03T20:09:49.831Z" },
 ]
 
 [[package]]
@@ -1319,8 +1319,8 @@ name = "uvicorn"
 version = "0.52.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "click", marker = "python_full_version < '3.12' or python_full_version >= '3.14' or sys_platform != 'emscripten'" },
-    { name = "h11", marker = "python_full_version < '3.12' or python_full_version >= '3.14' or sys_platform != 'emscripten'" },
+    { name = "click" },
+    { name = "h11" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2e/28/64ca011edf31c715b4fad359c587ea52391aaffa125065695590241ff617/uvicorn-0.52.3.tar.gz", hash = "sha256:18857b9e6579300be55c91c0a1cfd37d9a2cf0cabea33b88275f199eb73b8b58", size = 100621, upload-time = "2026-08-13T16:50:02.899Z" }
 wheels = [
